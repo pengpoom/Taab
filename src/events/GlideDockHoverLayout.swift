@@ -6,6 +6,30 @@ enum GlideDockEdge: Equatable {
     case right
 }
 
+/// Controls which Dock apps are eligible for a hover preview. The decision is made after
+/// Taab has collected the app's actionable windows, but before any thumbnails are captured.
+enum GlideDockHoverPreviewMode: String, CaseIterable, Hashable {
+    case allApps
+    case multipleWindowsOnly
+    case disabled
+
+    var localizedTitle: String {
+        switch self {
+        case .allApps: return NSLocalizedString("All apps with windows", comment: "")
+        case .multipleWindowsOnly: return NSLocalizedString("Only apps with multiple windows", comment: "")
+        case .disabled: return NSLocalizedString("No previews", comment: "")
+        }
+    }
+
+    func shouldShowPreview(windowCount: Int) -> Bool {
+        switch self {
+        case .allApps: return windowCount >= 1
+        case .multipleWindowsOnly: return windowCount >= 2
+        case .disabled: return false
+        }
+    }
+}
+
 /// Coordinate and panel-placement rules shared by the live Dock preview and unit tests.
 /// CGEvent/AX use a primary-screen top-left origin; AppKit windows use a primary-screen bottom-left origin.
 enum GlideDockHoverLayout {

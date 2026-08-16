@@ -12,13 +12,15 @@ struct GlideDockTarget {
 final class GlideDockHoverPreviewController: NSObject {
     static let shared = GlideDockHoverPreviewController()
 
-    static let preferenceKey = "taab.dock-hover-previews.enabled"
+    static let preferenceKey = "taab.dock-hover-previews.mode"
+    static let legacyPreferenceKey = "taab.dock-hover-previews.enabled"
     private static let showDelay: TimeInterval = 0.28
     private static let hideDelay: TimeInterval = 0.16
 
     private let hoverMonitor = GlideDockHoverMonitor()
     private let previewPanel = GlideDockPreviewPanel()
     private weak var menuItem: NSMenuItem?
+    private var modeMenuItems = [GlideDockHoverPreviewMode: NSMenuItem]()
     private var showWorkItem: DispatchWorkItem?
     private var hideWorkItem: DispatchWorkItem?
     private var refreshWorkItem: DispatchWorkItem?
@@ -31,6 +33,7 @@ final class GlideDockHoverPreviewController: NSObject {
 
     private override init() {
         super.init()
+        migrateLegacyPreferenceIfNeeded()
         hoverMonitor.onMove = { [weak self] point, target in
             self?.pointerMoved(to: point, target: target)
         }
@@ -39,26 +42,38 @@ final class GlideDockHoverPreviewController: NSObject {
         }
     }
 
-    private var isEnabled: Bool {
-        CachedUserDefaults.bool(Self.preferenceKey)
+    var currentMode: GlideDockHoverPreviewMode {
+        let rawValue = UserDefaults.standard.string(forKey: Self.preferenceKey)
+        return rawValue.flatMap(GlideDockHoverPreviewMode.init(rawValue:)) ?? .multipleWindowsOnly
     }
 
     func installMenuItem(in menu: NSMenu) {
         let item = NSMenuItem(
-            title: "Dock Hover Previews",
-            action: #selector(toggleEnabled(_:)),
+            title: NSLocalizedString("Dock hover previews", comment: ""),
+            action: nil,
             keyEquivalent: "")
-        item.target = self
-        item.state = isEnabled ? .on : .off
         if #available(macOS 11.0, *) {
             item.image = NSImage(systemSymbolName: "rectangle.on.rectangle.angled", accessibilityDescription: nil)
         }
+        let submenu = NSMenu(title: item.title)
+        for mode in GlideDockHoverPreviewMode.allCases {
+            let modeItem = NSMenuItem(
+                title: mode.localizedTitle,
+                action: #selector(selectMode(_:)),
+                keyEquivalent: "")
+            modeItem.target = self
+            modeItem.representedObject = mode.rawValue
+            submenu.addItem(modeItem)
+            modeMenuItems[mode] = modeItem
+        }
+        item.submenu = submenu
         menuItem = item
         menu.addItem(item)
+        refreshMenuState()
     }
 
     func start() {
-        guard !isStarted, isEnabled else { return }
+        guard !isStarted, currentMode != .disabled else { return }
         isStarted = true
         GlideDockHitTester.shared.start()
         hoverMonitor.start()
@@ -122,14 +137,20 @@ final class GlideDockHoverPreviewController: NSObject {
         previewPanel.updateThumbnail(for: window)
     }
 
-    @objc private func toggleEnabled(_ sender: NSMenuItem) {
-        Preferences.set(Self.preferenceKey, String(!isEnabled))
-        preferenceDidChange()
+    @objc private func selectMode(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let mode = GlideDockHoverPreviewMode(rawValue: rawValue) else { return }
+        Preferences.set(Self.preferenceKey, mode.rawValue)
     }
 
     func preferenceDidChange() {
-        menuItem?.state = isEnabled ? .on : .off
-        if isEnabled { start() } else { stop() }
+        refreshMenuState()
+        if currentMode == .disabled {
+            stop()
+        } else {
+            start()
+            refreshVisiblePreview()
+        }
     }
 
     private func pointerMoved(to quartzPoint: CGPoint, target: GlideDockTarget?) {
@@ -192,7 +213,7 @@ final class GlideDockHoverPreviewController: NSObject {
 
     private func show(_ target: GlideDockTarget) {
         let windows = previewWindows(for: target.bundleIdentifier)
-        guard !windows.isEmpty else {
+        guard currentMode.shouldShowPreview(windowCount: windows.count) else {
             hideImmediately()
             return
         }
@@ -205,7 +226,7 @@ final class GlideDockHoverPreviewController: NSObject {
     private func refreshVisiblePreview() {
         guard let target = visibleTarget else { return }
         let windows = previewWindows(for: target.bundleIdentifier)
-        guard !windows.isEmpty else {
+        guard currentMode.shouldShowPreview(windowCount: windows.count) else {
             hideImmediately()
             return
         }
@@ -242,6 +263,34 @@ final class GlideDockHoverPreviewController: NSObject {
     private func activate(_ window: Window) {
         hideImmediately()
         window.focus()
+    }
+
+    private func refreshMenuState() {
+        let selectedMode = currentMode
+        for (mode, item) in modeMenuItems {
+            item.state = mode == selectedMode ? .on : .off
+        }
+        menuItem?.isEnabled = true
+    }
+
+    /// v0.0.2 stored this preference as a boolean. Preserve an explicit "off" choice while
+    /// mapping the old enabled state to the new, less intrusive multi-window default.
+    private func migrateLegacyPreferenceIfNeeded() {
+        let domain = UserDefaults.standard.persistentDomain(forName: App.bundleIdentifier) ?? [:]
+        guard domain[Self.preferenceKey] == nil,
+              let legacyValue = domain[Self.legacyPreferenceKey] else { return }
+        let wasEnabled: Bool
+        switch legacyValue {
+        case let value as Bool: wasEnabled = value
+        case let value as NSNumber: wasEnabled = value.boolValue
+        case let value as String: wasEnabled = NSString(string: value).boolValue
+        default: wasEnabled = true
+        }
+        Preferences.set(Self.preferenceKey,
+            wasEnabled ? GlideDockHoverPreviewMode.multipleWindowsOnly.rawValue
+                : GlideDockHoverPreviewMode.disabled.rawValue,
+            false)
+        Preferences.remove(Self.legacyPreferenceKey, false)
     }
 }
 

@@ -323,7 +323,11 @@
 "Dock behavior" = "程序坞行为";
 "Choose how Taab augments the macOS Dock." = "选择 Taab 如何增强 macOS 程序坞。";
 "Window previews on hover" = "悬停时显示窗口预览";
-"Show window thumbnails when the pointer rests on a Dock app icon." = "鼠标停留在程序坞应用图标上时显示窗口缩略图。";
+"Choose which Dock apps show window thumbnails when the pointer rests on their icon." = "选择鼠标停留时哪些程序坞应用显示窗口缩略图。";
+"All apps with windows" = "所有有窗口的 App";
+"Only apps with multiple windows" = "仅多窗口 App";
+"No previews" = "从不显示";
+"Dock hover previews" = "程序坞悬停预览";
 "Windows-style Dock clicks" = "Windows 风格程序坞点击";
 "Click an active app to minimize its window; click again to restore it." = "点击前台应用以最小化窗口，再次点击即可恢复。";
 "Window sidebars" = "窗口侧边栏";

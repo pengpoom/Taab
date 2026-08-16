@@ -1,6 +1,23 @@
 import XCTest
 
 final class GlideDockHoverLayoutTests: XCTestCase {
+    func testAllAppsModeAllowsOneOrMoreWindows() {
+        XCTAssertFalse(GlideDockHoverPreviewMode.allApps.shouldShowPreview(windowCount: 0))
+        XCTAssertTrue(GlideDockHoverPreviewMode.allApps.shouldShowPreview(windowCount: 1))
+        XCTAssertTrue(GlideDockHoverPreviewMode.allApps.shouldShowPreview(windowCount: 2))
+    }
+
+    func testMultipleWindowsModeRequiresAtLeastTwoWindows() {
+        XCTAssertFalse(GlideDockHoverPreviewMode.multipleWindowsOnly.shouldShowPreview(windowCount: 0))
+        XCTAssertFalse(GlideDockHoverPreviewMode.multipleWindowsOnly.shouldShowPreview(windowCount: 1))
+        XCTAssertTrue(GlideDockHoverPreviewMode.multipleWindowsOnly.shouldShowPreview(windowCount: 2))
+    }
+
+    func testDisabledModeNeverShowsPreview() {
+        XCTAssertFalse(GlideDockHoverPreviewMode.disabled.shouldShowPreview(windowCount: 0))
+        XCTAssertFalse(GlideDockHoverPreviewMode.disabled.shouldShowPreview(windowCount: 10))
+    }
+
     func testQuartzToAppKitPointUsesPrimaryScreenTop() {
         XCTAssertEqual(
             GlideDockHoverLayout.appKitPoint(fromQuartz: CGPoint(x: -200, y: 140), primaryMaxY: 1080),

@@ -323,7 +323,11 @@
 "Dock behavior" = "Dock behavior";
 "Choose how Taab augments the macOS Dock." = "Choose how Taab augments the macOS Dock.";
 "Window previews on hover" = "Window previews on hover";
-"Show window thumbnails when the pointer rests on a Dock app icon." = "Show window thumbnails when the pointer rests on a Dock app icon.";
+"Choose which Dock apps show window thumbnails when the pointer rests on their icon." = "Choose which Dock apps show window thumbnails when the pointer rests on their icon.";
+"All apps with windows" = "All apps with windows";
+"Only apps with multiple windows" = "Only apps with multiple windows";
+"No previews" = "No previews";
+"Dock hover previews" = "Dock hover previews";
 "Windows-style Dock clicks" = "Windows-style Dock clicks";
 "Click an active app to minimize its window; click again to restore it." = "Click an active app to minimize its window; click again to restore it.";
 "Window sidebars" = "Window sidebars";

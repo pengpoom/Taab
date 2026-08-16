@@ -4,7 +4,7 @@ import Cocoa
 /// Keeping them in one first-class page avoids scattering controls across the inherited tabs.
 final class TaabTab {
     private static var dockClickToggle: Switch?
-    private static var dockHoverToggle: Switch?
+    private static var dockHoverPopup: NSPopUpButton?
     private static var displayPopups = [String: NSPopUpButton]()
 
     static func initTab() -> NSView {
@@ -13,12 +13,23 @@ final class TaabTab {
             subTitle: NSLocalizedString("Choose how Taab augments the macOS Dock.", comment: ""),
             width: SettingsWindow.contentWidth)
 
-        let hoverToggle = LabelAndControl.makeSwitch(GlideDockHoverPreviewController.preferenceKey)
-        dockHoverToggle = hoverToggle
+        let hoverModes = GlideDockHoverPreviewMode.allCases
+        let hoverPopup = PopupButtonLikeSystemSettings()
+        let hoverTitles = hoverModes.map(\.localizedTitle)
+        hoverPopup.addItems(withTitles: hoverTitles)
+        hoverPopup.selectItem(at: hoverModes.firstIndex(of: GlideDockHoverPreviewController.shared.currentMode) ?? 1)
+        hoverPopup.onAction = { control in
+            guard let popup = control as? NSPopUpButton,
+                  let mode = hoverModes[safe: popup.indexOfSelectedItem] else { return }
+            Preferences.set(GlideDockHoverPreviewController.preferenceKey, mode.rawValue)
+        }
+        SettingsSearchIndex.registerStrings(hoverTitles)
+        SettingsSearchIndex.registerTarget(SettingsWindow.highlightTarget(hoverPopup))
+        dockHoverPopup = hoverPopup
         dockTable.addRow(TableGroupView.Row(
             leftTitle: NSLocalizedString("Window previews on hover", comment: ""),
-            subTitle: NSLocalizedString("Show window thumbnails when the pointer rests on a Dock app icon.", comment: ""),
-            rightViews: [hoverToggle]))
+            subTitle: NSLocalizedString("Choose which Dock apps show window thumbnails when the pointer rests on their icon.", comment: ""),
+            rightViews: [hoverPopup]))
 
         let clickToggle = LabelAndControl.makeSwitch(GlideDockClickMonitor.preferenceKey)
         dockClickToggle = clickToggle
@@ -57,7 +68,9 @@ final class TaabTab {
 
     static func refreshControlsFromPreferences() {
         dockClickToggle?.state = CachedUserDefaults.bool(GlideDockClickMonitor.preferenceKey) ? .on : .off
-        dockHoverToggle?.state = CachedUserDefaults.bool(GlideDockHoverPreviewController.preferenceKey) ? .on : .off
+        if let index = GlideDockHoverPreviewMode.allCases.firstIndex(of: GlideDockHoverPreviewController.shared.currentMode) {
+            dockHoverPopup?.selectItem(at: index)
+        }
         let placementsByDisplay = Dictionary(uniqueKeysWithValues:
             GlideSidebarCoordinator.shared.displaySettings().map { ($0.identifier, $0.placement) })
         for (identifier, popup) in displayPopups {
@@ -69,7 +82,7 @@ final class TaabTab {
 
     static func cleanup() {
         dockClickToggle = nil
-        dockHoverToggle = nil
+        dockHoverPopup = nil
         displayPopups.removeAll()
     }
 
