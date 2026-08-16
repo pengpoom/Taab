@@ -151,13 +151,15 @@ enum WindowThumbnails {
     /// macOS 26+): full-resolution frames for the Preview panel are fetched separately and just-in-time
     /// by `fetchPreviewFrames` into the session's capped cache, so idle RAM stays small and a show
     /// doesn't burst N full-res captures at the system capture path (#5861).
-    static func refreshAsync(_ windows: [Window], _ source: RefreshCausedBy, windowRemoved: Bool = false, prioritizedIds: Set<CGWindowID>? = nil, force: Bool = false) {
+    static func refreshAsync(_ windows: [Window], _ source: RefreshCausedBy, windowRemoved: Bool = false,
+                             prioritizedIds: Set<CGWindowID>? = nil, force: Bool = false,
+                             forDockPreview: Bool = false) {
         guard (!windows.isEmpty || windowRemoved) && ScreenRecordingPermission.status == .granted
                && !ScreenLockEvents.isScreenLocked
-               && Preferences.anyShortcutShowsWindowCaptures
+               && (Preferences.anyShortcutShowsWindowCaptures || forDockPreview)
                // `force` = a targeted background capture of the frontmost window (captureFocusedInBackground),
                // which must run even when the switcher is closed and background capture is off.
-               && (Preferences.captureWindowsInBackground || SwitcherSession.isActive || force) else { return }
+               && (Preferences.captureWindowsInBackground || SwitcherSession.isActive || force || forDockPreview) else { return }
         var eligibleWindows = [Window]()
         for window in windows {
             if !window.isWindowlessApp, let cgWindowId = window.cgWindowId, cgWindowId != CGWindowID(bitPattern: -1),
@@ -177,6 +179,14 @@ enum WindowThumbnails {
         } else {
             WindowCaptureScreenshotsPrivateApi.oneTimeScreenshots(eligibleWindows, source, prioritizedIds: prioritizedIds)
         }
+    }
+
+    /// Capture only the windows belonging to the Dock icon the pointer has deliberately hovered. This bypasses
+    /// switcher appearance/background-capture preferences, but keeps the same permission, screen-lock, per-window
+    /// throttling and restore-animation guards as every other Taab screenshot. No hover means no work.
+    static func refreshForDockPreview(_ windows: [Window]) {
+        refreshAsync(windows, .refreshUiAfterExternalEvent, prioritizedIds: Set(windows.compactMap(\.cgWindowId)),
+            force: true, forDockPreview: true)
     }
 
     /// Fetch just-in-time full-resolution Preview frames for the selected window and its ±2 cycling

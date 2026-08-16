@@ -4,7 +4,7 @@ import ApplicationServices
 /// Resolves a Dock click against the Dock's live accessibility tree. Icon frames are deliberately not cached:
 /// magnification moves neighbouring icons during the click, so even a recently-captured rectangle can name the
 /// wrong app. The inexpensive screen-edge guard keeps ordinary clicks from making any AX calls.
-private final class GlideDockHitTester {
+final class GlideDockHitTester {
     static let shared = GlideDockHitTester()
 
     private static let dockBundleIdentifier = "com.apple.dock"
@@ -15,11 +15,13 @@ private final class GlideDockHitTester {
     private var dockElement: AXUIElement?
     private var displayBounds = [CGRect]()
     private var screenObserver: NSObjectProtocol?
+    private var clientCount = 0
 
     private init() {}
 
     func start() {
-        guard screenObserver == nil else { return }
+        clientCount += 1
+        guard clientCount == 1 else { return }
         refreshDisplayBounds()
         _ = currentDockElement()
         screenObserver = NotificationCenter.default.addObserver(
@@ -31,6 +33,9 @@ private final class GlideDockHitTester {
     }
 
     func stop() {
+        guard clientCount > 0 else { return }
+        clientCount -= 1
+        guard clientCount == 0 else { return }
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         dockApplication = nil
@@ -39,6 +44,10 @@ private final class GlideDockHitTester {
     }
 
     func bundleIdentifier(at point: CGPoint) -> String? {
+        target(at: point)?.bundleIdentifier
+    }
+
+    func target(at point: CGPoint) -> GlideDockTarget? {
         guard isNearPossibleDockArea(point), let dockElement = currentDockElement() else { return nil }
         var hitElement: AXUIElement?
         let result = AXUIElementCopyElementAtPosition(dockElement, Float(point.x), Float(point.y), &hitElement)
@@ -46,7 +55,12 @@ private final class GlideDockHitTester {
             if result == .invalidUIElement { invalidateDockElement() }
             return nil
         }
-        return applicationBundleIdentifier(from: hitElement)
+        guard let dockItem = applicationDockItem(from: hitElement),
+              let bundleIdentifier = bundleIdentifier(of: dockItem) else { return nil }
+        return GlideDockTarget(
+            bundleIdentifier: bundleIdentifier,
+            quartzFrame: frame(of: dockItem) ?? .zero,
+            quartzPoint: point)
     }
 
     private func currentDockElement() -> AXUIElement? {
@@ -68,14 +82,14 @@ private final class GlideDockHitTester {
         dockElement = nil
     }
 
-    private func applicationBundleIdentifier(from hitElement: AXUIElement) -> String? {
+    private func applicationDockItem(from hitElement: AXUIElement) -> AXUIElement? {
         let deadline = ProcessInfo.processInfo.systemUptime + 0.04
         var current: AXUIElement? = hitElement
         for _ in 0..<5 {
             guard ProcessInfo.processInfo.systemUptime < deadline, let element = current else { return nil }
             AXUIElementSetMessagingTimeout(element, Self.messagingTimeout)
             if copyString(element, kAXSubroleAttribute as CFString) == kAXApplicationDockItemSubrole {
-                return bundleIdentifier(of: element)
+                return element
             }
             current = copyElement(element, kAXParentAttribute as CFString)
         }
@@ -114,6 +128,31 @@ private final class GlideDockHitTester {
         return nil
     }
 
+    private func frame(of element: AXUIElement) -> CGRect? {
+        guard let position = copyPoint(element, kAXPositionAttribute as CFString),
+              let size = copySize(element, kAXSizeAttribute as CFString),
+              size.width > 0, size.height > 0 else { return nil }
+        return CGRect(origin: position, size: size)
+    }
+
+    private func copyPoint(_ element: AXUIElement, _ attribute: CFString) -> CGPoint? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var point = CGPoint.zero
+        guard AXValueGetValue(value as! AXValue, .cgPoint, &point) else { return nil }
+        return point
+    }
+
+    private func copySize(_ element: AXUIElement, _ attribute: CFString) -> CGSize? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue(value as! AXValue, .cgSize, &size) else { return nil }
+        return size
+    }
+
     private func refreshDisplayBounds() {
         guard let mainScreen = NSScreen.screens.first else {
             displayBounds.removeAll()
@@ -148,6 +187,7 @@ private struct GlideDockLiveWindow {
 
 final class GlideDockClickMonitor {
     static let shared = GlideDockClickMonitor()
+    static let preferenceKey = "taab.dock-click.enabled"
 
     private static let messagingTimeout: Float = 0.015
     private static let normalTransactionDuration: TimeInterval = 0.45
@@ -156,11 +196,15 @@ final class GlideDockClickMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var transactionGate = GlideDockClickTransactionGate()
+    private var isStarted = false
 
     private init() {}
 
+    private var isEnabled: Bool { CachedUserDefaults.bool(Self.preferenceKey) }
+
     func start() {
-        guard eventTap == nil else { return }
+        guard isEnabled, !isStarted else { return }
+        isStarted = true
         GlideDockHitTester.shared.start()
         let mask = CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
         guard let tap = CGEvent.tapCreate(
@@ -170,6 +214,7 @@ final class GlideDockClickMonitor {
             eventsOfInterest: mask,
             callback: Self.callback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()) else {
+            isStarted = false
             GlideDockHitTester.shared.stop()
             Logger.error { "Taab Dock click event tap could not be created" }
             return
@@ -183,12 +228,18 @@ final class GlideDockClickMonitor {
     }
 
     func stop() {
+        guard isStarted else { return }
+        isStarted = false
         if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: false) }
         if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
         eventTap = nil
         runLoopSource = nil
         transactionGate.reset()
         GlideDockHitTester.shared.stop()
+    }
+
+    func preferenceDidChange() {
+        if isEnabled { start() } else { stop() }
     }
 
     private static let callback: CGEventTapCallBack = { _, type, event, userInfo in
@@ -206,6 +257,7 @@ final class GlideDockClickMonitor {
               let bundleIdentifier = GlideDockHitTester.shared.bundleIdentifier(at: event.location) else {
             return Unmanaged.passUnretained(event)
         }
+        GlideDockHoverPreviewController.shared.hideImmediately()
         let now = ProcessInfo.processInfo.systemUptime
         if transactionGate.isLocked(bundleIdentifier, at: now) {
             return nil

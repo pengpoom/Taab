@@ -1,5 +1,11 @@
 import Cocoa
 
+struct GlideSidebarDisplaySetting {
+    let identifier: String
+    let title: String
+    let placement: GlideSidebarPlacement
+}
+
 final class GlideSidebarCoordinator: NSObject {
     static let shared = GlideSidebarCoordinator()
 
@@ -56,6 +62,22 @@ final class GlideSidebarCoordinator: NSObject {
         refreshMenu()
     }
 
+    func displaySettings() -> [GlideSidebarDisplaySetting] {
+        NSScreen.screens.enumerated().compactMap { index, screen in
+            guard let identifier = screenIdentifier(screen) else { return nil }
+            return GlideSidebarDisplaySetting(
+                identifier: identifier,
+                title: displayName(screen, index),
+                placement: placement(for: screen))
+        }
+    }
+
+    func setPlacement(_ placement: GlideSidebarPlacement, for displayIdentifier: String) {
+        UserDefaults.standard.set(placement.rawValue,
+            forKey: Self.preferencePrefix + displayIdentifier)
+        reloadScreens()
+    }
+
     func scheduleRefresh() {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in self?.scheduleRefresh() }
@@ -90,9 +112,7 @@ final class GlideSidebarCoordinator: NSObject {
 
     @objc private func selectPlacement(_ sender: NSMenuItem) {
         guard let selection = sender.representedObject as? GlideSidebarMenuSelection else { return }
-        UserDefaults.standard.set(selection.placement.rawValue,
-            forKey: Self.preferencePrefix + selection.screenIdentifier)
-        reloadScreens()
+        setPlacement(selection.placement, for: selection.screenIdentifier)
     }
 
     private func refreshNow() {

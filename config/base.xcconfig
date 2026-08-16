@@ -4,8 +4,8 @@
 // preferences and macOS privacy grants continue to belong to the same app.
 PRODUCT_NAME = Taab
 PRODUCT_BUNDLE_IDENTIFIER = com.pengxiangyang.Glide
-CURRENT_PROJECT_VERSION = 1
-MARKETING_VERSION = 0.0.1
+CURRENT_PROJECT_VERSION = 2
+MARKETING_VERSION = 0.0.2
 MACOSX_DEPLOYMENT_TARGET = 10.13
 SWIFT_VERSION = 5.8 // xcode 14.2 translates this to 5.0; xcode 16.2 as 5.8
 SWIFT_TREAT_WARNINGS_AS_ERRORS = YES

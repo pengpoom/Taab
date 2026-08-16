@@ -4,11 +4,13 @@ Taab 是一个基于 AltTab 演进的原生 macOS 窗口工作流工具，目标
 
 1. 用横向窗口缩略图切换器替代系统纵向/图标式切换体验；
 2. 为每一块显示器分别配置左侧、右侧或关闭的窗口侧边栏；
-3. 让程序坞图标具备类似 Windows 的“点击唤起，再次点击最小化”行为。
+3. 让程序坞图标具备类似 Windows 的“悬停预览、点击唤起、再次点击最小化”行为。
 
-当前已经完成首个可运行 MVP：横向 `Command-Tab`、每屏独立侧边栏和 Windows 风格 Dock 点击均已接入。产品边界见 [PRODUCT.md](PRODUCT.md)，技术设计见 [ARCHITECTURE.md](ARCHITECTURE.md)，剩余验收见 [TODO.md](TODO.md)。
+当前已经完成首个可运行 MVP：横向 `Command-Tab`、每屏独立侧边栏，以及 Windows 风格 Dock 悬停预览与点击切换均已接入。产品边界见 [PRODUCT.md](PRODUCT.md)，技术设计见 [ARCHITECTURE.md](ARCHITECTURE.md)，剩余验收见 [TODO.md](TODO.md)。
 
-当前首版为 `0.0.1`，仍处于早期开发阶段。
+设置窗口左侧的 `Taab` 页面集中管理程序坞预览、程序坞点击行为，以及每块显示器的侧边栏位置。
+
+当前版本为 `0.0.2`，仍处于早期开发阶段。
 
 ## 开发路线
 

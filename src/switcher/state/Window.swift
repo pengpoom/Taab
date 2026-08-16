@@ -263,6 +263,7 @@ class Window {
         // stale but correct, while another capture is asked for (`WindowThumbnails.acceptCapture`)
         guard WindowThumbnails.acceptCapture(self, screenshot) else { return }
         thumbnail = screenshot
+        GlideDockHoverPreviewController.shared.thumbnailDidRefresh(self)
         if !SwitcherSession.isActive || !shouldShowTheUser { return }
         if let position, let size,
            let view = (TilesView.recycledViews.first { $0.window_?.cgWindowId == cgWindowId }) {

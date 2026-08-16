@@ -320,3 +320,14 @@
 "Your settings reset every time Taab restarts." = "Your settings reset every time Taab restarts.";
 "Your trial includes Pro features" = "Your trial includes Pro features";
 "YOUR USAGE SO FAR" = "YOUR USAGE SO FAR";
+"Dock behavior" = "Dock behavior";
+"Choose how Taab augments the macOS Dock." = "Choose how Taab augments the macOS Dock.";
+"Window previews on hover" = "Window previews on hover";
+"Show window thumbnails when the pointer rests on a Dock app icon." = "Show window thumbnails when the pointer rests on a Dock app icon.";
+"Windows-style Dock clicks" = "Windows-style Dock clicks";
+"Click an active app to minimize its window; click again to restore it." = "Click an active app to minimize its window; click again to restore it.";
+"Window sidebars" = "Window sidebars";
+"Choose a position independently for each connected display." = "Choose a position independently for each connected display.";
+"Off" = "Off";
+"Left" = "Left";
+"Right" = "Right";

@@ -551,6 +551,7 @@ class SettingsWindow: NSWindow {
 
     private func sectionDefinitions() -> [SettingsSectionDefinition] {
         [
+            SettingsSectionDefinition(id: "taab", title: "Taab", symbol: .sparkles, builder: TaabTab.initTab, registerDynamicSearchContent: nil),
             SettingsSectionDefinition(id: "appearance", title: NSLocalizedString("Appearance", comment: ""), symbol: .paintpalette, builder: AppearanceTab.initTab, registerDynamicSearchContent: nil),
             SettingsSectionDefinition(id: "controls", title: NSLocalizedString("Controls", comment: ""), symbol: .command, builder: ControlsTab.initTab, registerDynamicSearchContent: ControlsTab.registerSidebarRowsSearchContent),
             SettingsSectionDefinition(id: "general", title: NSLocalizedString("General", comment: ""), symbol: .gearshape, builder: GeneralTab.initTab, registerDynamicSearchContent: nil),
@@ -1010,6 +1011,7 @@ class SettingsWindow: NSWindow {
     }
 
     private func refreshControlsFromSettings() {
+        TaabTab.refreshControlsFromPreferences()
         GeneralTab.refreshControlsFromPreferences()
     }
 
@@ -1276,6 +1278,7 @@ extension SettingsWindow: NSWindowDelegate {
         // close machinery causes objc_release crashes on re-entry.
         DispatchQueue.main.async {
             AppearanceTab.cleanup()
+            TaabTab.cleanup()
             ControlsTab.cleanup()
             GeneralTab.cleanup()
             ExceptionsTab.cleanup()

@@ -320,3 +320,14 @@
 "Your settings reset every time Taab restarts." = "每次重新启动 Taab 时，你的设置都会被重置。";
 "Your trial includes Pro features" = "您的试用包含 Pro 功能";
 "YOUR USAGE SO FAR" = "您目前的使用情况";
+"Dock behavior" = "程序坞行为";
+"Choose how Taab augments the macOS Dock." = "选择 Taab 如何增强 macOS 程序坞。";
+"Window previews on hover" = "悬停时显示窗口预览";
+"Show window thumbnails when the pointer rests on a Dock app icon." = "鼠标停留在程序坞应用图标上时显示窗口缩略图。";
+"Windows-style Dock clicks" = "Windows 风格程序坞点击";
+"Click an active app to minimize its window; click again to restore it." = "点击前台应用以最小化窗口，再次点击即可恢复。";
+"Window sidebars" = "窗口侧边栏";
+"Choose a position independently for each connected display." = "为每块已连接的显示器分别选择侧边栏位置。";
+"Off" = "关闭";
+"Left" = "左侧";
+"Right" = "右侧";

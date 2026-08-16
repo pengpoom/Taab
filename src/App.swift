@@ -11,7 +11,7 @@ class App: AppCenterApplication {
     static let bundleIdentifier = Bundle.main.bundleIdentifier!
     static let bundleURL = Bundle.main.bundleURL
     static let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as! String
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.1"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.2"
     static let licence = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as! String
     static let repository = "https://github.com/pengpoom/Taab"
     static let appIconReps = CGImage.allNamed("app.icns")
@@ -287,6 +287,7 @@ class App: AppCenterApplication {
 
     static func refreshOpenUiAfterExternalEvent(_ windowsToScreenshot: [Window], windowRemoved: Bool = false) {
         GlideSidebarCoordinator.shared.scheduleRefresh()
+        GlideDockHoverPreviewController.shared.scheduleRefresh()
         WindowThumbnails.refreshAsync(windowsToScreenshot, .refreshUiAfterExternalEvent, windowRemoved: windowRemoved)
         switcherUiRefreshThrottler.throttleOrProceed {
             guard SwitcherSession.isActive else { return }
@@ -422,6 +423,7 @@ class App: AppCenterApplication {
         SleepWakeEvents.observe()
         Applications.initialDiscovery()
         GlideDockClickMonitor.shared.start()
+        GlideDockHoverPreviewController.shared.start()
         GlideSidebarCoordinator.shared.start()
         // The one initial window inventory; later ones ride events + switcher shows. It belongs here, not in
         // the WindowServer tap: the tap is installed before the permission gate, and this needs `Spaces.refresh`
@@ -546,6 +548,7 @@ extension App: NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        GlideDockHoverPreviewController.shared.stop()
         GlideDockClickMonitor.shared.stop()
         GlideSidebarCoordinator.shared.stop()
         // symbolic hotkeys state persist after the app is quit; we restore this shortcut before quitting

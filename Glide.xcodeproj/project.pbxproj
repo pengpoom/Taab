@@ -250,6 +250,10 @@
 		A11DE0000000000000000004 /* GlideDockClickDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE0000000000000000003 /* GlideDockClickDecision.swift */; };
 		A11DE0000000000000000005 /* GlideDockClickDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE0000000000000000003 /* GlideDockClickDecision.swift */; };
 		A11DE0000000000000000007 /* GlideDockClickDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE0000000000000000006 /* GlideDockClickDecisionTests.swift */; };
+		A11DE3000000000000000003 /* GlideDockHoverPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE3000000000000000002 /* GlideDockHoverPreview.swift */; };
+		A11DE3000000000000000005 /* GlideDockHoverLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE3000000000000000004 /* GlideDockHoverLayout.swift */; };
+		A11DE3000000000000000006 /* GlideDockHoverLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE3000000000000000004 /* GlideDockHoverLayout.swift */; };
+		A11DE3000000000000000008 /* GlideDockHoverLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE3000000000000000007 /* GlideDockHoverLayoutTests.swift */; };
 		A11DE1000000000000000003 /* GlideSidebarCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE1000000000000000002 /* GlideSidebarCoordinator.swift */; };
 		A11DE1000000000000000005 /* GlideSidebarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE1000000000000000004 /* GlideSidebarLayout.swift */; };
 		A11DE1000000000000000006 /* GlideSidebarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE1000000000000000004 /* GlideSidebarLayout.swift */; };
@@ -279,6 +283,7 @@
 		BF0CBBBB0000000000001001 /* OnActionExtensionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF0CBBBB0000000000000001 /* OnActionExtensionTests.swift */; };
 		BF0CDDDD0000000000001001 /* ResizedCopyWithCoreGraphicsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF0CDDDD0000000000000001 /* ResizedCopyWithCoreGraphicsTests.swift */; };
 		BF0CEEEE0000000000001001 /* PersistedWindowFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF0CEEEE0000000000000001 /* PersistedWindowFrameTests.swift */; };
+		AA7AAB000000000000000002 /* TaabTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7AAB000000000000000001 /* TaabTab.swift */; };
 		C79742CA78D3CC74B6920437 /* menubar-0.pdf in Resources */ = {isa = PBXBuildFile; fileRef = 02540420CE27E6C973652426 /* menubar-0.pdf */; };
 		D04BA0000000000000DCFFF2 /* DynamicColorTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04BA0000000000000DCFFF1 /* DynamicColorTextField.swift */; };
 		D04BAE2100000000ED003003 /* LightLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04BAE2100000000ED003002 /* LightLabel.swift */; };
@@ -622,6 +627,9 @@
 		A11DE0000000000000000003 /* GlideDockClickDecision.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideDockClickDecision.swift; sourceTree = "<group>"; };
 		A11DE0000000000000000006 /* GlideDockClickDecisionTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideDockClickDecisionTests.swift; sourceTree = "<group>"; };
 		A11DE0000000000000000008 /* GlideDockClickDecisionSpecs.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = GlideDockClickDecisionSpecs.md; sourceTree = "<group>"; };
+		A11DE3000000000000000002 /* GlideDockHoverPreview.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideDockHoverPreview.swift; sourceTree = "<group>"; };
+		A11DE3000000000000000004 /* GlideDockHoverLayout.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideDockHoverLayout.swift; sourceTree = "<group>"; };
+		A11DE3000000000000000007 /* GlideDockHoverLayoutTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideDockHoverLayoutTests.swift; sourceTree = "<group>"; };
 		A11DE1000000000000000002 /* GlideSidebarCoordinator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideSidebarCoordinator.swift; sourceTree = "<group>"; };
 		A11DE1000000000000000004 /* GlideSidebarLayout.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideSidebarLayout.swift; sourceTree = "<group>"; };
 		A11DE1000000000000000007 /* GlideSidebarLayoutTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideSidebarLayoutTests.swift; sourceTree = "<group>"; };
@@ -709,6 +717,7 @@
 		D04BA258B56193958D60978A /* TileView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TileView.swift; sourceTree = "<group>"; };
 		D04BA26C75F76C277653C932 /* FeedbackWindow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FeedbackWindow.swift; sourceTree = "<group>"; };
 		D04BA27695D9A5824720BD7B /* ExceptionsTab.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ExceptionsTab.swift; sourceTree = "<group>"; };
+		AA7AAB000000000000000001 /* TaabTab.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TaabTab.swift; sourceTree = "<group>"; };
 		D04BA282BB16C1554595A968 /* Applications.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Applications.swift; sourceTree = "<group>"; };
 		D04BA2A68FFD585C3A64434A /* zh-CN */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.strings; name = "zh-CN"; path = InfoPlist.strings; sourceTree = "<group>"; };
 		D04BA2E723062A1DAC58618F /* setup_ci_pr.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = setup_ci_pr.sh; sourceTree = "<group>"; };
@@ -940,6 +949,9 @@
 				A11DE0000000000000000003 /* GlideDockClickDecision.swift */,
 				A11DE0000000000000000006 /* GlideDockClickDecisionTests.swift */,
 				A11DE0000000000000000008 /* GlideDockClickDecisionSpecs.md */,
+				A11DE3000000000000000002 /* GlideDockHoverPreview.swift */,
+				A11DE3000000000000000004 /* GlideDockHoverLayout.swift */,
+				A11DE3000000000000000007 /* GlideDockHoverLayoutTests.swift */,
 				BF0C8B2C6D4E8FA012345678 /* SleepWakeEvents.swift */,
 				BF0C8D4E8F60A1B234567890 /* ScreenLockEvents.swift */,
 				BF0C869E544F968051715452 /* SystemAppearanceEvents.swift */,
@@ -1437,6 +1449,7 @@
 		D04BA3FA52AA40B827A72F10 /* tabs */ = {
 			isa = PBXGroup;
 			children = (
+				AA7AAB000000000000000001 /* TaabTab.swift */,
 				5F0A63062F82D99200AE4C38 /* UpgradeTab.swift */,
 				5F21C9DE2C6E93F10091F72F /* appearance */,
 				5F21C9DD2C6E93E60091F72F /* controls */,
@@ -2020,6 +2033,8 @@
 				A11DE2000000000000000005 /* GlideProductDefaultsTests.swift in Sources */,
 				A11DE0000000000000000005 /* GlideDockClickDecision.swift in Sources */,
 				A11DE0000000000000000007 /* GlideDockClickDecisionTests.swift in Sources */,
+				A11DE3000000000000000006 /* GlideDockHoverLayout.swift in Sources */,
+				A11DE3000000000000000008 /* GlideDockHoverLayoutTests.swift in Sources */,
 				A11DE1000000000000000006 /* GlideSidebarLayout.swift in Sources */,
 				A11DE1000000000000000008 /* GlideSidebarLayoutTests.swift in Sources */,
 				5F882F382EC3C63400110A9F /* CustomRecorderControlTestable.swift in Sources */,
@@ -2132,6 +2147,8 @@
 			files = (
 				A11DE0000000000000000002 /* GlideDockClickMonitor.swift in Sources */,
 				A11DE0000000000000000004 /* GlideDockClickDecision.swift in Sources */,
+				A11DE3000000000000000003 /* GlideDockHoverPreview.swift in Sources */,
+				A11DE3000000000000000005 /* GlideDockHoverLayout.swift in Sources */,
 				A11DE1000000000000000003 /* GlideSidebarCoordinator.swift in Sources */,
 				A11DE1000000000000000005 /* GlideSidebarLayout.swift in Sources */,
 				D04BAFBC862BA5FE0294EA7A /* AXUIElement.swift in Sources */,
@@ -2184,6 +2201,7 @@
 				D04BA7BE7F3DD24D58ACE942 /* AppearanceTab.swift in Sources */,
 				D04BAD1BE9DC22C48C53D195 /* AboutTab.swift in Sources */,
 				D04BA15A1B0C4871EA7CB899 /* GeneralTab.swift in Sources */,
+				AA7AAB000000000000000002 /* TaabTab.swift in Sources */,
 				D04BAD451966B43720120D2E /* Menubar.swift in Sources */,
 				D04BA2E64C59D96F6EB27D9D /* FeedbackWindow.swift in Sources */,
 				D04BA2F0A1B2C3D4E5F60003 /* DebugWindow.swift in Sources */,

@@ -37,6 +37,7 @@ class Menubar {
         permissionCalloutMenuItems = [permissionCalloutMenuItem, calloutSeparator]
         addMenuItem(NSLocalizedString("Show", comment: "Menubar option"), #selector(App.showUiFromShortcut0), "", "eye", nil, App.self)
         GlideSidebarCoordinator.shared.installMenuItem(in: menu)
+        GlideDockHoverPreviewController.shared.installMenuItem(in: menu)
         menu.addItem(NSMenuItem.separator())
         addMenuItem(NSLocalizedString("Settings…", comment: "Menubar option"), #selector(App.showSettingsWindow), ",", "gear", nil, App.self)
         addMenuItem(NSLocalizedString("Check permissions…", comment: "Menubar option"), #selector(App.checkPermissions), "", "hand.raised", nil, App.self)

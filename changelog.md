@@ -1,3 +1,13 @@
+## [0.0.2](https://github.com/pengpoom/Taab/releases/tag/v0.0.2) (2026-08-16)
+
+### Dock previews and settings
+
+- Added event-driven window thumbnail previews when hovering over Dock app icons.
+- Added click-to-focus support for individual windows from the preview panel.
+- Added a dedicated Taab settings page for Dock behavior and per-display sidebars.
+- Added independent persistent switches for Dock previews and Windows-style Dock clicks.
+- Added bottom, left, right, and multi-display Dock preview positioning.
+
 ## [0.0.1](https://github.com/pengpoom/Taab/releases/tag/v0.0.1) (2026-08-16)
 
 ### Initial Taab release
