@@ -74,6 +74,9 @@ class PreferencesEvents {
         case GlideDockHoverPreviewController.preferenceKey:
             GlideDockHoverPreviewController.shared.preferenceDidChange()
             TaabTab.refreshControlsFromPreferences()
+        case GlideSidebarCoordinator.idleModePreferenceKey:
+            GlideSidebarCoordinator.shared.preferenceDidChange()
+            TaabTab.refreshControlsFromPreferences()
         case let k where preferencesRequiringUiReset.contains(k) && TilesPanel.shared != nil: App.resetPreferencesDependentComponents()
         case let k where (isOverrideKey(k) || isPerShortcutGroupingKey(k)) && TilesPanel.shared != nil: App.resetPreferencesDependentComponents()
         default: break

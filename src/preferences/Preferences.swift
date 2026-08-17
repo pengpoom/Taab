@@ -45,6 +45,7 @@ class Preferences {
             "captureWindowsInBackground": "true",
             "taab.dock-click.enabled": "true",
             "taab.dock-hover-previews.mode": GlideDockHoverPreviewMode.multipleWindowsOnly.rawValue,
+            "taab.sidebar.idle-mode": GlideSidebarIdleMode.icons.rawValue,
             "screenRecordingPermissionSkipped": "false",
             "trackpadHapticFeedbackEnabled": "true",
             "settingsWindowShownOnFirstLaunch": "false",

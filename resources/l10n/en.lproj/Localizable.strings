@@ -332,6 +332,11 @@
 "Click an active app to minimize its window; click again to restore it." = "Click an active app to minimize its window; click again to restore it.";
 "Window sidebars" = "Window sidebars";
 "Choose a position independently for each connected display." = "Choose a position independently for each connected display.";
+"When pointer is away" = "When pointer is away";
+"Hover over the sidebar to expand it." = "Hover over the sidebar to expand it.";
+"Hide at screen edge" = "Hide at screen edge";
+"Show icons only" = "Show icons only";
+"Keep expanded" = "Keep expanded";
 "Off" = "Off";
 "Left" = "Left";
 "Right" = "Right";

@@ -332,6 +332,11 @@
 "Click an active app to minimize its window; click again to restore it." = "点击前台应用以最小化窗口，再次点击即可恢复。";
 "Window sidebars" = "窗口侧边栏";
 "Choose a position independently for each connected display." = "为每块已连接的显示器分别选择侧边栏位置。";
+"When pointer is away" = "鼠标离开时";
+"Hover over the sidebar to expand it." = "鼠标悬停在侧边栏上时自动展开。";
+"Hide at screen edge" = "隐藏在屏幕边缘";
+"Show icons only" = "仅显示图标";
+"Keep expanded" = "保持展开";
 "Off" = "关闭";
 "Left" = "左侧";
 "Right" = "右侧";

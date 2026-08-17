@@ -5,6 +5,7 @@ import Cocoa
 final class TaabTab {
     private static var dockClickToggle: Switch?
     private static var dockHoverPopup: NSPopUpButton?
+    private static var sidebarIdlePopup: NSPopUpButton?
     private static var displayPopups = [String: NSPopUpButton]()
 
     static func initTab() -> NSView {
@@ -42,6 +43,23 @@ final class TaabTab {
             title: NSLocalizedString("Window sidebars", comment: ""),
             subTitle: NSLocalizedString("Choose a position independently for each connected display.", comment: ""),
             width: SettingsWindow.contentWidth)
+        let idleModes = GlideSidebarIdleMode.allCases
+        let idlePopup = PopupButtonLikeSystemSettings()
+        let idleTitles = idleModes.map(\.localizedTitle)
+        idlePopup.addItems(withTitles: idleTitles)
+        idlePopup.selectItem(at: idleModes.firstIndex(of: GlideSidebarCoordinator.shared.currentIdleMode) ?? 1)
+        idlePopup.onAction = { control in
+            guard let popup = control as? NSPopUpButton,
+                  let mode = idleModes[safe: popup.indexOfSelectedItem] else { return }
+            Preferences.set(GlideSidebarCoordinator.idleModePreferenceKey, mode.rawValue)
+        }
+        SettingsSearchIndex.registerStrings(idleTitles)
+        SettingsSearchIndex.registerTarget(SettingsWindow.highlightTarget(idlePopup))
+        sidebarIdlePopup = idlePopup
+        sidebarTable.addRow(TableGroupView.Row(
+            leftTitle: NSLocalizedString("When pointer is away", comment: ""),
+            subTitle: NSLocalizedString("Hover over the sidebar to expand it.", comment: ""),
+            rightViews: [idlePopup]))
         let placements = GlideSidebarPlacement.allCases
         let placementTitles = placements.map(placementTitle)
         SettingsSearchIndex.registerStrings(placementTitles)
@@ -71,6 +89,9 @@ final class TaabTab {
         if let index = GlideDockHoverPreviewMode.allCases.firstIndex(of: GlideDockHoverPreviewController.shared.currentMode) {
             dockHoverPopup?.selectItem(at: index)
         }
+        if let index = GlideSidebarIdleMode.allCases.firstIndex(of: GlideSidebarCoordinator.shared.currentIdleMode) {
+            sidebarIdlePopup?.selectItem(at: index)
+        }
         let placementsByDisplay = Dictionary(uniqueKeysWithValues:
             GlideSidebarCoordinator.shared.displaySettings().map { ($0.identifier, $0.placement) })
         for (identifier, popup) in displayPopups {
@@ -83,6 +104,7 @@ final class TaabTab {
     static func cleanup() {
         dockClickToggle = nil
         dockHoverPopup = nil
+        sidebarIdlePopup = nil
         displayPopups.removeAll()
     }
 
