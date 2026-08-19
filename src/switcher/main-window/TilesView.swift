@@ -41,6 +41,7 @@ class TilesView {
     static var isSearchEditing: Bool { searchMode == .editing }
 
     static func startSearchSession(_ startInSearchMode: Bool) {
+        SwitcherSession.current?.panelLayoutLock = nil
         searchField.stringValue = ""
         Windows.updateSearchQuery("")
         searchMode = SearchModeResolver.startMode(startInSearch: startInSearchMode)
@@ -64,6 +65,7 @@ class TilesView {
 
     static func disableSearchMode() {
         guard SearchModeResolver.disable(mode: searchMode) == .exitToOff else { return }
+        SwitcherSession.current?.panelLayoutLock = nil
         TilesPanel.shared.resetFrozenPosition()
         searchMode = .off
         updateSearchFieldEditability()
@@ -79,6 +81,7 @@ class TilesView {
             case .placeCaretOnly:
                 placeSearchCaretAtEnd()
             case .enterEditing:
+                SwitcherSession.current?.panelLayoutLock = nil
                 searchMode = .editing
                 updateSearchFieldEditability()
                 SwitcherSession.current?.forceDoNothingOnRelease = true
@@ -307,6 +310,7 @@ class TilesView {
         // it would be nicer to remove this whole "reset" logic, and instead update each component to check Appearance properties before showing
         // Maybe in some Appkit willDraw() function that triggers before drawing it
         NSScreen.updatePreferred()
+        SwitcherSession.current?.panelLayoutLock = nil
         Appearance.update()
         // thumbnails are captured continuously. They will pick up the new size on the next cycle
         TilesPanel.updateMaxPossibleThumbnailSize()
@@ -395,15 +399,19 @@ class TilesView {
         Windows.updateSelectedAndHoveredWindowIndex(targetIndex)
     }
 
-    static func updateItemsAndLayout(_ preservedScrollOrigin: CGPoint?) {
-        var widthMax = TilesPanel.maxThumbnailsWidth().rounded()
-        if Preferences.effectiveAppearanceSize(SwitcherSession.activeShortcutIndex) == .auto {
+    static func updateItemsAndLayout(_ preservedScrollOrigin: CGPoint?, _ layoutLock: SwitcherPanelLayoutLock? = nil) {
+        let configuredSize = Preferences.effectiveAppearanceSize(SwitcherSession.activeShortcutIndex)
+        var widthMax = layoutLock?.thumbnailsWidth ?? TilesPanel.maxThumbnailsWidth().rounded()
+        if let lockedSize = layoutLock?.resolvedSizeIfAuto(configuredSize == .auto) {
+            Appearance.applySize(appearanceSize(lockedSize))
+            Self.updateCachedSizes()
+        } else if configuredSize == .auto {
             resolveAutoSize(widthMax)
             Self.updateCachedSizes()
             widthMax = TilesPanel.maxThumbnailsWidth().rounded()
         }
         if let (maxX, maxY, labelHeight, rowSignature) = layoutTileViews(widthMax) {
-            layoutParentViews(maxX, widthMax, maxY, labelHeight)
+            layoutParentViews(maxX, widthMax, maxY, labelHeight, layoutLock)
             centerRows(TilesView.thumbnailsWidth)
             if rowSignature != lastRowSignature {
                 for row in rows {
@@ -425,6 +433,31 @@ class TilesView {
 
     static func currentScrollOrigin() -> CGPoint {
         return scrollView.contentView.bounds.origin
+    }
+
+    static func capturePanelLayoutLock() -> SwitcherPanelLayoutLock {
+        SwitcherPanelLayoutLock(
+            resolvedAppearanceSize: panelResolvedSize(Appearance.resolvedSize),
+            contentSize: contentView.frame.size,
+            thumbnailsWidth: thumbnailsWidth,
+            thumbnailsHeight: thumbnailsHeight,
+            scrollFrame: scrollView.frame)
+    }
+
+    private static func panelResolvedSize(_ size: AppearanceSizePreference) -> SwitcherPanelResolvedSize {
+        switch size {
+            case .small: return .small
+            case .medium: return .medium
+            case .large, .auto: return .large
+        }
+    }
+
+    private static func appearanceSize(_ size: SwitcherPanelResolvedSize) -> AppearanceSizePreference {
+        switch size {
+            case .small: return .small
+            case .medium: return .medium
+            case .large: return .large
+        }
     }
 
     private static func restoreScrollOrigin(_ scrollOrigin: CGPoint) {
@@ -558,17 +591,25 @@ class TilesView {
         App.shared.userInterfaceLayoutDirection == .leftToRight ? currentX : currentX - width
     }
 
-    private static func layoutParentViews(_ maxX: CGFloat, _ widthMax: CGFloat, _ maxY: CGFloat, _ labelHeight: CGFloat) {
+    private static func layoutParentViews(
+        _ maxX: CGFloat,
+        _ widthMax: CGFloat,
+        _ maxY: CGFloat,
+        _ labelHeight: CGFloat,
+        _ layoutLock: SwitcherPanelLayoutLock?
+    ) {
         let searchBarHeight = searchBarHeight()
         let searchBottomPadding = CGFloat(10)
         let searchReservedHeight = searchMode == .off ? 0 : searchBarHeight + searchBottomPadding
         let heightMax = max(0, TilesPanel.maxThumbnailsHeight() - searchReservedHeight)
         let minSearchWidth = min(widthMax, 320)
         let minWidth = min(widthMax, 320)
-        TilesView.thumbnailsWidth = max(min(maxX, widthMax), searchMode == .off ? (maxX == 0 ? minWidth : 0) : minWidth)
-        TilesView.thumbnailsHeight = min(maxY, heightMax)
+        let proposedThumbnailsWidth = max(min(maxX, widthMax), searchMode == .off ? (maxX == 0 ? minWidth : 0) : minWidth)
+        let proposedThumbnailsHeight = min(maxY, heightMax)
+        TilesView.thumbnailsWidth = layoutLock?.thumbnailsWidth ?? proposedThumbnailsWidth
+        TilesView.thumbnailsHeight = layoutLock?.thumbnailsHeight ?? proposedThumbnailsHeight
         let appIconsBottomViewportPadding = appIconsBottomViewportPadding(maxY, heightMax, labelHeight)
-        let frameWidth = TilesView.thumbnailsWidth + Appearance.windowPadding * 2
+        var frameWidth = TilesView.thumbnailsWidth + Appearance.windowPadding * 2
         var frameHeight = TilesView.thumbnailsHeight + Appearance.windowPadding * 2 + searchReservedHeight
         let originX = Appearance.windowPadding
         var originY = Appearance.windowPadding
@@ -577,14 +618,22 @@ class TilesView {
             frameHeight = frameHeight - Appearance.intraCellPadding - labelHeight
             originY = originY - Appearance.intraCellPadding - labelHeight
         }
+        if let layoutLock {
+            frameWidth = layoutLock.contentSize.width
+            frameHeight = layoutLock.contentSize.height
+        }
         contentView.frame.size = NSSize(width: frameWidth, height: frameHeight)
         let host = contentView.hostView
         if host !== contentView {
             host.frame = CGRect(origin: .zero, size: NSSize(width: frameWidth, height: frameHeight))
         }
         let scrollHeight = max(0, min(maxY, heightMax) - appIconsBottomViewportPadding * 2)
-        scrollView.frame.size = NSSize(width: TilesView.thumbnailsWidth, height: scrollHeight)
-        scrollView.frame.origin = CGPoint(x: originX, y: originY + appIconsBottomViewportPadding * 2)
+        if let layoutLock {
+            scrollView.frame = layoutLock.scrollFrame
+        } else {
+            scrollView.frame.size = NSSize(width: TilesView.thumbnailsWidth, height: scrollHeight)
+            scrollView.frame.origin = CGPoint(x: originX, y: originY + appIconsBottomViewportPadding * 2)
+        }
         scrollView.contentView.frame.size = scrollView.frame.size
         if searchMode != .off {
             if searchField.superview !== host {

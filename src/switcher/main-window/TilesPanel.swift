@@ -38,11 +38,20 @@ class TilesPanel: NSPanel {
 
     func updateContents(_ preservedScrollOrigin: CGPoint?) {
         caTransaction {
-            TilesView.updateItemsAndLayout(preservedScrollOrigin)
-            guard SwitcherSession.isActive else { return }
-            setContentSize(TilesView.contentView.frame.size)
-            guard SwitcherSession.isActive else { return }
-            repositionOrFreeze()
+            guard let session = SwitcherSession.current else { return }
+            let layoutLock = session.panelLayoutLock
+            TilesView.updateItemsAndLayout(preservedScrollOrigin, layoutLock)
+            guard SwitcherSession.current === session else { return }
+            setContentSize(layoutLock?.contentSize ?? TilesView.contentView.frame.size)
+            guard SwitcherSession.current === session else { return }
+            if layoutLock == nil {
+                repositionOrFreeze()
+                // An intentional visible rebuild (search-mode or shortcut change) gets one fresh geometry, then
+                // immediately freezes again. The initial build is captured by show(), because it is not visible yet.
+                if session.panelShownAt != nil {
+                    session.panelLayoutLock = TilesView.capturePanelLayoutLock()
+                }
+            }
         }
         // prevent further AppKit work
         TilesView.clearNeedsLayout()
@@ -86,6 +95,11 @@ class TilesPanel: NSPanel {
 
     func show() {
         updateAppearance()
+        // Commit the fully-laid-out first frame before revealing it. The after-show window reconciliation may
+        // update tile contents, but cannot change this invocation's panel size.
+        if let session = SwitcherSession.current, session.panelLayoutLock == nil {
+            session.panelLayoutLock = TilesView.capturePanelLayoutLock()
+        }
         // The panel may have been hidden (alpha=0) by `App.showUiOrCycleSelection` on a
         // cross-shortcut summon to mask the rebuild. Reveal it atomically now that contents
         // and Appearance are in their final state.

@@ -1,6 +1,23 @@
 import XCTest
 
 final class AppearanceTests: XCTestCase {
+    func testPanelLayoutLockKeepsResolvedAutoSize() {
+        let lock = SwitcherPanelLayoutLock(
+            resolvedAppearanceSize: .medium,
+            contentSize: NSSize(width: 800, height: 400),
+            thumbnailsWidth: 760,
+            thumbnailsHeight: 360,
+            scrollFrame: NSRect(x: 20, y: 20, width: 760, height: 360))
+
+        XCTAssertEqual(lock.resolvedSizeIfAuto(true), .medium)
+        XCTAssertNil(lock.resolvedSizeIfAuto(false))
+    }
+
+    func testPanelLayoutLockHasSmallBoundedStorage() {
+        // The lock is geometry-only: no screenshots, Window instances, collections, or other retained graph.
+        XCTAssertLessThanOrEqual(MemoryLayout<SwitcherPanelLayoutLock>.stride, 128)
+    }
+
     // TODO add 6, 7, 8 rowsCount and reuse vertical screens data from bellow
     func testGoodValuesForThumbnailsWidthMinMax() throws {
         var actual: (CGFloat, CGFloat)

@@ -331,6 +331,7 @@ class App: AppCenterApplication {
                 isVeryFirstSummon = false
             }
             session.isFirstSummon = false
+            session.panelLayoutLock = nil
             session.shortcutIndex = shortcutIndex
             // Hide instantly so the rebuild for a different shortcut (Appearance change, layout
             // recalc) is invisible. `TilesPanel.show()` flips alpha back to 1 once everything is

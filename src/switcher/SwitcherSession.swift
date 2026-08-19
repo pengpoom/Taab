@@ -1,5 +1,28 @@
 import Cocoa
 
+/// The panel geometry committed to the screen for one switcher summon.
+///
+/// Window discovery is deliberately refreshed after the first frame is visible. That refresh may change the
+/// number of tiles, but it must not run auto-size again and replace the already-visible panel with a differently
+/// sized one. Keeping only these value types makes the lock cheap and bounded; it owns no windows or images.
+enum SwitcherPanelResolvedSize: Equatable {
+    case small
+    case medium
+    case large
+}
+
+struct SwitcherPanelLayoutLock {
+    let resolvedAppearanceSize: SwitcherPanelResolvedSize
+    let contentSize: NSSize
+    let thumbnailsWidth: CGFloat
+    let thumbnailsHeight: CGFloat
+    let scrollFrame: NSRect
+
+    func resolvedSizeIfAuto(_ configuredIsAuto: Bool) -> SwitcherPanelResolvedSize? {
+        configuredIsAuto ? resolvedAppearanceSize : nil
+    }
+}
+
 /// Holds all state scoped to a single switcher invocation: from when the user
 /// first triggers the shortcut to when the panel is dismissed.
 ///
@@ -32,6 +55,9 @@ final class SwitcherSession {
     /// tick fell through to the 1s `missedVisibleSignalBudget` and hold-to-cycle started 1377ms in instead of
     /// the system's 417ms.
     var panelShownAt: TimeInterval?
+    /// Set immediately before the first visible frame. Background window-model refreshes may replace tile
+    /// contents, but reuse this geometry so users never see a large panel flash into a smaller one.
+    var panelLayoutLock: SwitcherPanelLayoutLock?
 
     var selectedIndex: Int = 0
     var hoveredIndex: Int?
