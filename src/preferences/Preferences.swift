@@ -46,6 +46,7 @@ class Preferences {
             "taab.dock-click.enabled": "true",
             "taab.dock-hover-previews.mode": GlideDockHoverPreviewMode.multipleWindowsOnly.rawValue,
             "taab.sidebar.idle-mode": GlideSidebarIdleMode.icons.rawValue,
+            GlideSidebarPinnedAppsStore.preferenceKey: "[]",
             "screenRecordingPermissionSkipped": "false",
             "trackpadHapticFeedbackEnabled": "true",
             "settingsWindowShownOnFirstLaunch": "false",

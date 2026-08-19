@@ -258,6 +258,9 @@
 		A11DE1000000000000000005 /* GlideSidebarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE1000000000000000004 /* GlideSidebarLayout.swift */; };
 		A11DE1000000000000000006 /* GlideSidebarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE1000000000000000004 /* GlideSidebarLayout.swift */; };
 		A11DE1000000000000000008 /* GlideSidebarLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE1000000000000000007 /* GlideSidebarLayoutTests.swift */; };
+		A11DE4000000000000000002 /* GlideSidebarPinnedApps.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE4000000000000000001 /* GlideSidebarPinnedApps.swift */; };
+		A11DE4000000000000000003 /* GlideSidebarPinnedApps.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE4000000000000000001 /* GlideSidebarPinnedApps.swift */; };
+		A11DE4000000000000000005 /* GlideSidebarPinnedAppsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE4000000000000000004 /* GlideSidebarPinnedAppsTests.swift */; };
 		A11DE2000000000000000003 /* GlideProductDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE2000000000000000001 /* GlideProductDefaults.swift */; };
 		A11DE2000000000000000004 /* GlideProductDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE2000000000000000001 /* GlideProductDefaults.swift */; };
 		A11DE2000000000000000005 /* GlideProductDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11DE2000000000000000002 /* GlideProductDefaultsTests.swift */; };
@@ -634,6 +637,8 @@
 		A11DE1000000000000000004 /* GlideSidebarLayout.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideSidebarLayout.swift; sourceTree = "<group>"; };
 		A11DE1000000000000000007 /* GlideSidebarLayoutTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideSidebarLayoutTests.swift; sourceTree = "<group>"; };
 		A11DE1000000000000000009 /* GlideSidebarLayoutSpecs.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = GlideSidebarLayoutSpecs.md; sourceTree = "<group>"; };
+		A11DE4000000000000000001 /* GlideSidebarPinnedApps.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideSidebarPinnedApps.swift; sourceTree = "<group>"; };
+		A11DE4000000000000000004 /* GlideSidebarPinnedAppsTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideSidebarPinnedAppsTests.swift; sourceTree = "<group>"; };
 		A11DE2000000000000000001 /* GlideProductDefaults.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideProductDefaults.swift; sourceTree = "<group>"; };
 		A11DE2000000000000000002 /* GlideProductDefaultsTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlideProductDefaultsTests.swift; sourceTree = "<group>"; };
 		BF0C87320241EAE01E38EF53 /* .periphery.yml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.yaml; path = .periphery.yml; sourceTree = "<group>"; };
@@ -983,6 +988,8 @@
 				A11DE1000000000000000002 /* GlideSidebarCoordinator.swift */,
 				A11DE1000000000000000004 /* GlideSidebarLayout.swift */,
 				A11DE1000000000000000007 /* GlideSidebarLayoutTests.swift */,
+				A11DE4000000000000000001 /* GlideSidebarPinnedApps.swift */,
+				A11DE4000000000000000004 /* GlideSidebarPinnedAppsTests.swift */,
 				A11DE1000000000000000009 /* GlideSidebarLayoutSpecs.md */,
 			);
 			path = sidebar;
@@ -2037,6 +2044,8 @@
 				A11DE3000000000000000008 /* GlideDockHoverLayoutTests.swift in Sources */,
 				A11DE1000000000000000006 /* GlideSidebarLayout.swift in Sources */,
 				A11DE1000000000000000008 /* GlideSidebarLayoutTests.swift in Sources */,
+				A11DE4000000000000000003 /* GlideSidebarPinnedApps.swift in Sources */,
+				A11DE4000000000000000005 /* GlideSidebarPinnedAppsTests.swift in Sources */,
 				5F882F382EC3C63400110A9F /* CustomRecorderControlTestable.swift in Sources */,
 				BF0C81FA62D810342F59291A /* AppearanceTests.swift in Sources */,
 				5EA8E110000000000000F003 /* AxQueryRouting.swift in Sources */,
@@ -2151,6 +2160,7 @@
 				A11DE3000000000000000005 /* GlideDockHoverLayout.swift in Sources */,
 				A11DE1000000000000000003 /* GlideSidebarCoordinator.swift in Sources */,
 				A11DE1000000000000000005 /* GlideSidebarLayout.swift in Sources */,
+				A11DE4000000000000000002 /* GlideSidebarPinnedApps.swift in Sources */,
 				D04BAFBC862BA5FE0294EA7A /* AXUIElement.swift in Sources */,
 				D04BA73E90EFEF8247A5105D /* CGWindow.swift in Sources */,
 				D04BA004884A273D4D2D3EF1 /* HelperExtensions.swift in Sources */,

@@ -340,3 +340,11 @@
 "Off" = "关闭";
 "Left" = "左侧";
 "Right" = "右侧";
+"Pinned" = "Pinned";
+"Other Apps" = "Other Apps";
+"Full Screen" = "Full Screen";
+"Desktop %d" = "Desktop %d";
+"Add App…" = "添加 App…";
+"Pin App" = "固定 App";
+"Unpin App" = "取消固定";
+"Drag to reorder" = "拖动调整顺序";

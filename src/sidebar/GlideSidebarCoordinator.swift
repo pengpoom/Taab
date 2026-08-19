@@ -1,5 +1,10 @@
 import Cocoa
 
+private extension NSPasteboard.PasteboardType {
+    static let glideSidebarPinnedApp = NSPasteboard.PasteboardType(
+        "com.pengxiangyang.Glide.sidebar-pinned-app")
+}
+
 struct GlideSidebarDisplaySetting {
     let identifier: String
     let title: String
@@ -7,14 +12,40 @@ struct GlideSidebarDisplaySetting {
 }
 
 private struct GlideSidebarItem {
-    let window: Window
     let title: String
-    let highlightsApplication: Bool
+    let accessibilityLabel: String
+    let icon: NSImage?
+    let isFocused: Bool
+    let isRunning: Bool
+    let activate: () -> Void
+    let pinAction: GlideSidebarPinAction?
+    let reorderIdentifier: String?
+}
+
+private struct GlideSidebarPinAction {
+    let title: String
+    let perform: () -> Void
+}
+
+private struct GlideSidebarHeaderAction {
+    let accessibilityLabel: String
+    let perform: (NSButton) -> Void
 }
 
 private struct GlideSidebarSection {
     let title: String
     let items: [GlideSidebarItem]
+    let headerAction: GlideSidebarHeaderAction?
+    let reorderAction: ((String, Int) -> Void)?
+
+    init(title: String, items: [GlideSidebarItem],
+         headerAction: GlideSidebarHeaderAction? = nil,
+         reorderAction: ((String, Int) -> Void)? = nil) {
+        self.title = title
+        self.items = items
+        self.headerAction = headerAction
+        self.reorderAction = reorderAction
+    }
 }
 
 final class GlideSidebarCoordinator: NSObject {
@@ -22,6 +53,8 @@ final class GlideSidebarCoordinator: NSObject {
     static let idleModePreferenceKey = "taab.sidebar.idle-mode"
 
     private static let preferencePrefix = "glide.sidebar.placement."
+    private let pinnedAppsStore = GlideSidebarPinnedAppsStore(
+        didSave: { Preferences.invalidateAllCache() })
     private var panels = [String: GlideSidebarPanel]()
     private weak var rootMenuItem: NSMenuItem?
     private var refreshWorkItem: DispatchWorkItem?
@@ -158,6 +191,8 @@ final class GlideSidebarCoordinator: NSObject {
     private func sidebarSections(for screen: NSScreen) -> [GlideSidebarSection] {
         let screenId = screen.cachedUuid()
         let isMainScreen = NSScreen.main === screen
+        let pinnedApplications = pinnedAppsStore.applications()
+        let pinnedBundleIdentifiers = Set(pinnedApplications.map(\.bundleIdentifier))
         let windows = Windows.list.filter { window in
             guard !window.isTabbed, !window.isPhantom, window.shouldShowTheUser else { return false }
             if window.screenId == screenId { return true }
@@ -171,37 +206,277 @@ final class GlideSidebarCoordinator: NSObject {
         var seenApplications = Set<pid_t>()
         let appItems = appWindows.compactMap { window -> GlideSidebarItem? in
             guard seenApplications.insert(window.application.pid).inserted else { return nil }
-            return GlideSidebarItem(
-                window: window,
+            if let bundleIdentifier = window.application.bundleIdentifier,
+               pinnedBundleIdentifiers.contains(bundleIdentifier) {
+                return nil
+            }
+            return sidebarItem(
+                for: window,
                 title: window.application.localizedName ?? window.title,
-                highlightsApplication: true)
+                highlightsApplication: true,
+                pinnedBundleIdentifiers: pinnedBundleIdentifiers)
         }
 
         let ordinaryWindows = windows.filter {
             !$0.isWindowlessApp && !$0.isMinimized && !$0.isHidden && !$0.isOnAllSpaces
         }
         let fullscreenItems = ordinaryWindows.filter(\.isFullscreen).map {
-            GlideSidebarItem(window: $0, title: sidebarTitle(for: $0), highlightsApplication: false)
+            sidebarItem(
+                for: $0,
+                title: sidebarTitle(for: $0),
+                highlightsApplication: false,
+                pinnedBundleIdentifiers: pinnedBundleIdentifiers)
         }
         let desktopWindows = ordinaryWindows.filter { !$0.isFullscreen }
         let desktopGroups = Dictionary(grouping: desktopWindows) { window in
             window.spaceIndexes.first ?? Spaces.currentSpaceIndex
         }
 
-        // Contexts keeps these two buckets visible even when one is empty. Besides matching its
-        // visual hierarchy, the stable headers stop the panel from jumping when the last app or
-        // full-screen window moves back to a desktop.
+        // Keep the stable top-level buckets visible even when empty. Besides matching Contexts'
+        // hierarchy, their reserved header rows stop icons below them from jumping between refreshes.
         var sections = [
-            GlideSidebarSection(title: "Apps", items: appItems),
-            GlideSidebarSection(title: "Full Screen", items: fullscreenItems),
+            GlideSidebarSection(
+                title: NSLocalizedString("Pinned", comment: "Sidebar section"),
+                items: pinnedApplications.map(sidebarItem(for:)),
+                headerAction: GlideSidebarHeaderAction(
+                    accessibilityLabel: NSLocalizedString("Add App…", comment: "Sidebar action"),
+                    perform: { [weak self] button in self?.showAddPinnedAppsMenu(near: button) }),
+                reorderAction: { [weak self] bundleIdentifier, finalIndex in
+                    guard self?.pinnedAppsStore.move(
+                        bundleIdentifier: bundleIdentifier, to: finalIndex) == true else { return }
+                    DispatchQueue.main.async { [weak self] in self?.refreshNow() }
+                }),
+            GlideSidebarSection(
+                title: NSLocalizedString("Other Apps", comment: "Sidebar section"),
+                items: appItems),
+            GlideSidebarSection(
+                title: NSLocalizedString("Full Screen", comment: "Sidebar section"),
+                items: fullscreenItems),
         ]
         for index in desktopGroups.keys.sorted() {
             let items = (desktopGroups[index] ?? []).map {
-                GlideSidebarItem(window: $0, title: sidebarTitle(for: $0), highlightsApplication: false)
+                sidebarItem(
+                    for: $0,
+                    title: sidebarTitle(for: $0),
+                    highlightsApplication: false,
+                    pinnedBundleIdentifiers: pinnedBundleIdentifiers)
             }
-            sections.append(GlideSidebarSection(title: "Desktop \(index)", items: items))
+            sections.append(GlideSidebarSection(
+                title: String(format: NSLocalizedString("Desktop %d", comment: "Sidebar section"), index),
+                items: items))
         }
         return sections
+    }
+
+    private func sidebarItem(
+        for window: Window,
+        title: String,
+        highlightsApplication: Bool,
+        pinnedBundleIdentifiers: Set<String>
+    ) -> GlideSidebarItem {
+        let application = window.application
+        let applicationName = application.localizedName ?? title
+        let isFocused = Applications.frontmostPid == application.pid
+            && (highlightsApplication || application.focusedWindow === window)
+        let pinAction: GlideSidebarPinAction?
+        if let bundleIdentifier = application.bundleIdentifier {
+            let pinnedApplication = GlideSidebarPinnedApp(
+                bundleIdentifier: bundleIdentifier,
+                displayName: applicationName,
+                bundlePath: application.bundleURL?.path)
+            let isPinned = pinnedBundleIdentifiers.contains(bundleIdentifier)
+            pinAction = GlideSidebarPinAction(
+                title: NSLocalizedString(isPinned ? "Unpin App" : "Pin App", comment: "Sidebar context menu"),
+                perform: { [weak self] in self?.togglePinnedApplication(pinnedApplication) })
+        } else {
+            pinAction = nil
+        }
+        return GlideSidebarItem(
+            title: title,
+            accessibilityLabel: "\(applicationName), \(title)",
+            icon: application.runningApplication.icon,
+            isFocused: isFocused,
+            isRunning: !application.runningApplication.isTerminated,
+            activate: { window.focus() },
+            pinAction: pinAction,
+            reorderIdentifier: nil)
+    }
+
+    private func sidebarItem(for pinnedApplication: GlideSidebarPinnedApp) -> GlideSidebarItem {
+        let runningApplication = preferredRunningApplication(pinnedApplication.bundleIdentifier)
+        let bundleURL = resolvedBundleURL(for: pinnedApplication)
+        let title = runningApplication?.localizedName
+            ?? bundleDisplayName(at: bundleURL)
+            ?? pinnedApplication.displayName
+        let icon = runningApplication?.icon
+            ?? bundleURL.map { NSWorkspace.shared.icon(forFile: $0.path) }
+        return GlideSidebarItem(
+            title: title,
+            accessibilityLabel: title,
+            icon: icon,
+            isFocused: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                == pinnedApplication.bundleIdentifier,
+            isRunning: runningApplication != nil,
+            activate: { [weak self] in self?.activatePinnedApplication(pinnedApplication) },
+            pinAction: GlideSidebarPinAction(
+                title: NSLocalizedString("Unpin App", comment: "Sidebar context menu"),
+                perform: { [weak self] in self?.togglePinnedApplication(pinnedApplication) }),
+            reorderIdentifier: pinnedApplication.bundleIdentifier)
+    }
+
+    private func togglePinnedApplication(_ application: GlideSidebarPinnedApp) {
+        if pinnedAppsStore.isPinned(application.bundleIdentifier) {
+            pinnedAppsStore.unpin(bundleIdentifier: application.bundleIdentifier)
+        } else {
+            pinnedAppsStore.pin(
+                bundleIdentifier: application.bundleIdentifier,
+                displayName: application.displayName,
+                bundlePath: application.bundlePath)
+        }
+        refreshNow()
+    }
+
+    private func activatePinnedApplication(_ pinnedApplication: GlideSidebarPinnedApp) {
+        let candidates = Windows.list.filter {
+            $0.application.bundleIdentifier == pinnedApplication.bundleIdentifier
+                && !$0.isTabbed && !$0.isPhantom && $0.shouldShowTheUser
+        }
+        let realWindows = candidates.filter { !$0.isWindowlessApp }
+        if let window = (realWindows.isEmpty ? candidates : realWindows)
+            .min(by: { $0.lastFocusOrder < $1.lastFocusOrder }) {
+            window.focus()
+            scheduleRefresh()
+            return
+        }
+
+        if let runningApplication = preferredRunningApplication(pinnedApplication.bundleIdentifier) {
+            if runningApplication.isHidden { runningApplication.unhide() }
+            runningApplication.activate(options: .activateAllWindows)
+            scheduleRefresh()
+            return
+        }
+
+        guard let bundleURL = resolvedBundleURL(for: pinnedApplication),
+              (try? NSWorkspace.shared.launchApplication(at: bundleURL, configuration: [:])) != nil else {
+            NSSound.beep()
+            return
+        }
+        scheduleRefresh()
+    }
+
+    private func preferredRunningApplication(_ bundleIdentifier: String) -> NSRunningApplication? {
+        let applications = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter { !$0.isTerminated }
+        return applications.first(where: \.isActive) ?? applications.first
+    }
+
+    private func resolvedBundleURL(for pinnedApplication: GlideSidebarPinnedApp) -> URL? {
+        if let current = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: pinnedApplication.bundleIdentifier) {
+            return current
+        }
+        guard let path = pinnedApplication.bundlePath else { return nil }
+        let stored = URL(fileURLWithPath: path)
+        guard Bundle(url: stored)?.bundleIdentifier == pinnedApplication.bundleIdentifier else { return nil }
+        return stored
+    }
+
+    private func bundleDisplayName(at url: URL?) -> String? {
+        guard let url, let bundle = Bundle(url: url) else { return nil }
+        return (bundle.localizedInfoDictionary?["CFBundleDisplayName"] as? String)
+            ?? (bundle.infoDictionary?["CFBundleDisplayName"] as? String)
+            ?? (bundle.infoDictionary?["CFBundleName"] as? String)
+    }
+
+    private func showAddPinnedAppsMenu(near sender: NSButton) {
+        let menu = NSMenu()
+        if let panel = sender.window as? GlideSidebarPanel { menu.delegate = panel }
+        let runningApplicationsItem = NSMenuItem(
+            title: NSLocalizedString("Add a running app", comment: ""),
+            action: nil,
+            keyEquivalent: "")
+        let runningApplicationsMenu = NSMenu()
+        runningApplicationsForPinMenu().forEach { runningApplicationsMenu.addItem(pinMenuItem(for: $0)) }
+        runningApplicationsItem.submenu = runningApplicationsMenu
+        runningApplicationsItem.isEnabled = !runningApplicationsMenu.items.isEmpty
+        menu.addItem(runningApplicationsItem)
+
+        let diskItem = NSMenuItem(
+            title: NSLocalizedString("Add an app from disk", comment: ""),
+            action: #selector(addPinnedApplicationFromDisk(_:)),
+            keyEquivalent: "")
+        diskItem.target = self
+        menu.addItem(diskItem)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 2), in: sender)
+    }
+
+    private func runningApplicationsForPinMenu() -> [NSRunningApplication] {
+        let pinnedBundleIdentifiers = Set(pinnedAppsStore.applications().map(\.bundleIdentifier))
+        var applicationsByBundleIdentifier = [String: NSRunningApplication]()
+        let candidates = Windows.list.map { $0.application.runningApplication }
+            + NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+        for application in candidates {
+            guard let bundleIdentifier = application.bundleIdentifier,
+                  !application.isTerminated,
+                  !pinnedBundleIdentifiers.contains(bundleIdentifier),
+                  applicationsByBundleIdentifier[bundleIdentifier] == nil else { continue }
+            applicationsByBundleIdentifier[bundleIdentifier] = application
+        }
+        return applicationsByBundleIdentifier.values.sorted {
+            ($0.localizedName ?? $0.bundleIdentifier ?? "").localizedStandardCompare(
+                $1.localizedName ?? $1.bundleIdentifier ?? "") == .orderedAscending
+        }
+    }
+
+    private func pinMenuItem(for application: NSRunningApplication) -> NSMenuItem {
+        let item = NSMenuItem(
+            title: application.localizedName ?? application.bundleIdentifier ?? "",
+            action: #selector(addRunningPinnedApplication(_:)),
+            keyEquivalent: "")
+        if let icon = application.icon?.copy() as? NSImage {
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
+        }
+        item.representedObject = application.bundleIdentifier
+        item.target = self
+        return item
+    }
+
+    @objc private func addRunningPinnedApplication(_ sender: NSMenuItem) {
+        guard let bundleIdentifier = sender.representedObject as? String,
+              let application = preferredRunningApplication(bundleIdentifier) else { return }
+        pinApplication(
+            bundleIdentifier: bundleIdentifier,
+            displayName: application.localizedName ?? bundleIdentifier,
+            bundleURL: application.bundleURL)
+    }
+
+    @objc private func addPinnedApplicationFromDisk(_ sender: NSMenuItem) {
+        let dialog = NSOpenPanel()
+        dialog.allowsMultipleSelection = false
+        dialog.allowedFileTypes = ["app"]
+        dialog.canChooseDirectories = false
+        NSApp.activate(ignoringOtherApps: true)
+        dialog.begin { [weak self] response in
+            guard response == .OK, let url = dialog.url,
+                  let bundle = Bundle(url: url), let bundleIdentifier = bundle.bundleIdentifier else { return }
+            let displayName = (bundle.localizedInfoDictionary?["CFBundleDisplayName"] as? String)
+                ?? (bundle.infoDictionary?["CFBundleDisplayName"] as? String)
+                ?? (bundle.infoDictionary?["CFBundleName"] as? String)
+                ?? url.deletingPathExtension().lastPathComponent
+            self?.pinApplication(
+                bundleIdentifier: bundleIdentifier,
+                displayName: displayName,
+                bundleURL: url)
+        }
+    }
+
+    private func pinApplication(bundleIdentifier: String, displayName: String, bundleURL: URL?) {
+        pinnedAppsStore.pin(
+            bundleIdentifier: bundleIdentifier,
+            displayName: displayName,
+            bundlePath: bundleURL?.path)
+        refreshNow()
     }
 
     private func sidebarTitle(for window: Window) -> String {
@@ -284,7 +559,54 @@ private final class GlideSidebarMenuSelection: NSObject {
     }
 }
 
-private final class GlideSidebarPanel: NSPanel {
+private protocol GlideSidebarPinnedDropDelegate: AnyObject {
+    func pinnedDraggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation
+    func pinnedDraggingExited(_ sender: NSDraggingInfo?)
+    func performPinnedDrag(_ sender: NSDraggingInfo) -> Bool
+}
+
+private final class GlideSidebarDocumentView: FlippedView {
+    weak var pinnedDropDelegate: GlideSidebarPinnedDropDelegate?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([.glideSidebarPinnedApp])
+    }
+
+    override func wantsPeriodicDraggingUpdates() -> Bool { false }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        pinnedDropDelegate?.pinnedDraggingUpdated(sender) ?? []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        pinnedDropDelegate?.pinnedDraggingUpdated(sender) ?? []
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        pinnedDropDelegate?.pinnedDraggingExited(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        pinnedDropDelegate?.performPinnedDrag(sender) ?? false
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        pinnedDropDelegate?.pinnedDraggingExited(sender)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Class only supports programmatic initialization")
+    }
+}
+
+private struct GlideSidebarPendingPinnedDrop {
+    let sectionIndex: Int
+    let bundleIdentifier: String
+    let finalIndex: Int
+}
+
+private final class GlideSidebarPanel: NSPanel, NSMenuDelegate, GlideSidebarPinnedDropDelegate {
     private static let outerInset: CGFloat = 4
     private static let contentInset: CGFloat = 4
     private static let sectionHeight: CGFloat = 26
@@ -296,11 +618,13 @@ private final class GlideSidebarPanel: NSPanel {
     private static let cornerRadius: CGFloat = 8
 
     private let scrollView = NSScrollView()
-    private let documentView = FlippedView()
+    private let documentView = GlideSidebarDocumentView()
     private let background = GlideSidebarTrackingView()
     private let materialTint = NSView()
+    private let reorderIndicator = NSView()
     private var sections = [GlideSidebarSection]()
     private var sectionHeaders = [NSTextField]()
+    private var sectionHeaderButtons = [NSButton?]()
     private var sectionButtons = [[GlideSidebarWindowButton]]()
     private var collapseWorkItem: DispatchWorkItem?
     private var visibleFrame = CGRect.zero
@@ -310,6 +634,10 @@ private final class GlideSidebarPanel: NSPanel {
     private var presentationGeneration = 0
     private var presentedExpanded: Bool?
     private var presentedHiddenTrigger: Bool?
+    private var trackedMenuCount = 0
+    private var isPinnedDragActive = false
+    private var pendingSections: [GlideSidebarSection]?
+    private var pendingPinnedDrop: GlideSidebarPendingPinnedDrop?
 
     override var canBecomeKey: Bool { false }
 
@@ -327,6 +655,13 @@ private final class GlideSidebarPanel: NSPanel {
         hasShadow = true
         setAccessibilitySubrole(.unknown)
         setAccessibilityLabel("Taab windows sidebar")
+
+        documentView.pinnedDropDelegate = self
+        reorderIndicator.wantsLayer = true
+        reorderIndicator.layer?.backgroundColor = NSColor.selectedControlColor
+            .withAlphaComponent(0.9).cgColor
+        reorderIndicator.layer?.cornerRadius = 1
+        reorderIndicator.isHidden = true
 
         background.material = .popover
         background.blendingMode = .behindWindow
@@ -382,9 +717,21 @@ private final class GlideSidebarPanel: NSPanel {
     }
 
     func update(_ sections: [GlideSidebarSection]) {
+        guard !isPinnedDragActive else {
+            pendingSections = sections
+            return
+        }
+        rebuild(sections)
+    }
+
+    private func rebuild(_ sections: [GlideSidebarSection]) {
+        pendingSections = nil
+        pendingPinnedDrop = nil
+        reorderIndicator.isHidden = true
         self.sections = sections
         documentView.subviews.forEach { $0.removeFromSuperview() }
         sectionHeaders.removeAll()
+        sectionHeaderButtons.removeAll()
         sectionButtons.removeAll()
         for section in sections {
             let header = NSTextField(labelWithString: section.title)
@@ -394,15 +741,34 @@ private final class GlideSidebarPanel: NSPanel {
             documentView.addSubview(header)
             sectionHeaders.append(header)
 
+            let headerButton = section.headerAction.map { action -> NSButton in
+                let button = NSButton(title: "+", target: nil, action: nil)
+                button.font = .systemFont(ofSize: 17, weight: .regular)
+                button.isBordered = false
+                button.toolTip = action.accessibilityLabel
+                button.setAccessibilityLabel(action.accessibilityLabel)
+                button.onAction = { control in
+                    guard let button = control as? NSButton else { return }
+                    action.perform(button)
+                }
+                documentView.addSubview(button)
+                return button
+            }
+            sectionHeaderButtons.append(headerButton)
+
             let buttons = section.items.map { item -> GlideSidebarWindowButton in
                 let button = GlideSidebarWindowButton(item)
                 button.target = self
-                button.action = #selector(focusWindow(_:))
+                button.action = #selector(activateItem(_:))
+                button.menu?.delegate = self
+                button.onReorderDragBegan = { [weak self] in self?.pinnedDragBegan() }
+                button.onReorderDragEnded = { [weak self] in self?.pinnedDragEnded() }
                 documentView.addSubview(button)
                 return button
             }
             sectionButtons.append(buttons)
         }
+        documentView.addSubview(reorderIndicator)
         applyPresentation(animated: false)
     }
 
@@ -420,11 +786,123 @@ private final class GlideSidebarPanel: NSPanel {
         return activationFrame.contains(screenPoint)
     }
 
-    @objc private func focusWindow(_ sender: GlideSidebarWindowButton) {
-        sender.windowModel?.focus()
+    @objc private func activateItem(_ sender: GlideSidebarWindowButton) {
+        sender.activate()
+    }
+
+    private func pinnedDragBegan() {
+        guard !isPinnedDragActive else { return }
+        isPinnedDragActive = true
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
+    }
+
+    private func pinnedDragEnded() {
+        guard isPinnedDragActive else { return }
+        isPinnedDragActive = false
+        clearPinnedDropState()
+        if let pendingSections {
+            rebuild(pendingSections)
+        }
+        updatePointerLocation(NSEvent.mouseLocation)
+    }
+
+    func pinnedDraggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard isPinnedDragActive,
+              let source = sender.draggingSource as? GlideSidebarPinnedDragHandle,
+              source.window === self,
+              sender.draggingPasteboard.string(forType: .glideSidebarPinnedApp)
+                == source.bundleIdentifier,
+              let sectionIndex = sections.firstIndex(where: { $0.reorderAction != nil }),
+              sectionButtons.indices.contains(sectionIndex) else {
+            clearPinnedDropState()
+            return []
+        }
+        let bundleIdentifier = source.bundleIdentifier
+        let buttons = sectionButtons[sectionIndex]
+        guard let firstButton = buttons.first,
+              let sourceIndex = buttons.firstIndex(where: {
+                  $0.reorderIdentifier == bundleIdentifier
+              }) else {
+            clearPinnedDropState()
+            return []
+        }
+        let location = documentView.convert(sender.draggingLocation, from: nil)
+        let rowsFrame = buttons.dropFirst().reduce(firstButton.frame) {
+            $0.union($1.frame)
+        }
+        guard rowsFrame.contains(location) else {
+            clearPinnedDropState()
+            return []
+        }
+
+        let insertionIndex = buttons.firstIndex(where: {
+            location.y < $0.frame.midY
+        }) ?? buttons.count
+        guard let finalIndex = GlideSidebarPinnedReorder.finalIndex(
+            itemCount: buttons.count,
+            sourceIndex: sourceIndex,
+            insertionIndex: insertionIndex) else {
+            clearPinnedDropState()
+            return []
+        }
+        pendingPinnedDrop = GlideSidebarPendingPinnedDrop(
+            sectionIndex: sectionIndex,
+            bundleIdentifier: bundleIdentifier,
+            finalIndex: finalIndex)
+
+        if finalIndex == sourceIndex {
+            reorderIndicator.isHidden = true
+        } else {
+            let indicatorY = insertionIndex == buttons.count
+                ? buttons[buttons.count - 1].frame.maxY
+                : buttons[insertionIndex].frame.minY
+            reorderIndicator.frame = CGRect(
+                x: firstButton.frame.minX + 4,
+                y: indicatorY - 1,
+                width: max(0, firstButton.frame.width - 8),
+                height: 2)
+            reorderIndicator.isHidden = false
+        }
+        return .move
+    }
+
+    func pinnedDraggingExited(_ sender: NSDraggingInfo?) {
+        clearPinnedDropState()
+    }
+
+    func performPinnedDrag(_ sender: NSDraggingInfo) -> Bool {
+        guard pinnedDraggingUpdated(sender).contains(.move),
+              let drop = pendingPinnedDrop,
+              sections.indices.contains(drop.sectionIndex),
+              let reorderAction = sections[drop.sectionIndex].reorderAction else {
+            clearPinnedDropState()
+            return false
+        }
+        clearPinnedDropState()
+        reorderAction(drop.bundleIdentifier, drop.finalIndex)
+        return true
+    }
+
+    private func clearPinnedDropState() {
+        pendingPinnedDrop = nil
+        reorderIndicator.isHidden = true
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        trackedMenuCount += 1
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        trackedMenuCount = max(0, trackedMenuCount - 1)
+        guard trackedMenuCount == 0 else { return }
+        updatePointerLocation(NSEvent.mouseLocation)
     }
 
     private func pointerHoverDidChange(_ isInside: Bool) {
+        guard isInside || (trackedMenuCount == 0 && !isPinnedDragActive) else { return }
         guard isInside != isPointerInside else { return }
         isPointerInside = isInside
         collapseWorkItem?.cancel()
@@ -525,10 +1003,15 @@ private final class GlideSidebarPanel: NSPanel {
         var y = Self.contentInset
         for index in sections.indices {
             let header = sectionHeaders[index]
+            let headerButton = sectionHeaderButtons[index]
             header.isHidden = !isExpanded
+            headerButton?.isHidden = !isExpanded
             if isExpanded {
+                let headerButtonWidth: CGFloat = headerButton == nil ? 0 : 24
                 header.frame = CGRect(x: 8, y: y + 4,
-                    width: max(0, contentWidth - 16), height: Self.sectionHeight - 4)
+                    width: max(0, contentWidth - 16 - headerButtonWidth), height: Self.sectionHeight - 4)
+                headerButton?.frame = CGRect(
+                    x: max(0, contentWidth - 26), y: y + 1, width: 22, height: Self.sectionHeight - 2)
             }
             // Reserve header space in every idle mode. Icons therefore keep the same vertical
             // coordinates before, during, and after expansion instead of jumping between groups.
@@ -569,6 +1052,122 @@ private final class GlideSidebarTrackingView: NSVisualEffectView {
     }
 }
 
+private final class GlideSidebarPinnedDragHandle: NSView, NSDraggingSource {
+    let bundleIdentifier: String
+    private weak var owner: GlideSidebarWindowButton?
+    private var isHovered = false
+    private var isDragging = false
+    private var hoverTrackingArea: NSTrackingArea?
+
+    init(bundleIdentifier: String, owner: GlideSidebarWindowButton) {
+        self.bundleIdentifier = bundleIdentifier
+        self.owner = owner
+        super.init(frame: .zero)
+        let accessibilityLabel = NSLocalizedString(
+            "Drag to reorder", comment: "Pinned app drag handle")
+        toolTip = accessibilityLabel
+        setAccessibilityLabel(accessibilityLabel)
+        setAccessibilityRole(.button)
+    }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) {
+            showContextMenu(with: event)
+            return
+        }
+        guard !isDragging, let owner else { return }
+
+        let pasteboardItem = NSPasteboardItem()
+        pasteboardItem.setString(bundleIdentifier, forType: .glideSidebarPinnedApp)
+        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+        draggingItem.setDraggingFrame(
+            convert(owner.bounds, from: owner),
+            contents: owner.reorderDraggingImage())
+        isDragging = true
+        window?.invalidateCursorRects(for: self)
+        owner.onReorderDragBegan?()
+        let session = beginDraggingSession(with: [draggingItem], event: event, source: self)
+        session.animatesToStartingPositionsOnCancelOrFail = true
+        session.draggingFormation = .none
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        showContextMenu(with: event)
+    }
+
+    private func showContextMenu(with event: NSEvent) {
+        guard let owner, let menu = owner.menu else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: owner)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil)
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        needsDisplay = true
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: isDragging ? .closedHand : .openHand)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let color = NSColor.labelColor.withAlphaComponent(isHovered ? 0.58 : 0.24)
+        color.setFill()
+        let lineWidth = min(10, max(0, bounds.width - 8))
+        let x = (bounds.width - lineWidth) / 2
+        for offset: CGFloat in [-4, 0, 4] {
+            NSBezierPath(roundedRect: CGRect(
+                x: x, y: bounds.midY + offset - 0.75,
+                width: lineWidth, height: 1.5),
+                xRadius: 0.75, yRadius: 0.75).fill()
+        }
+    }
+
+    func draggingSession(_ session: NSDraggingSession,
+                         sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .withinApplication ? .move : []
+    }
+
+    func ignoreModifierKeys(for session: NSDraggingSession) -> Bool { true }
+
+    func draggingSession(_ session: NSDraggingSession,
+                         endedAt screenPoint: NSPoint,
+                         operation: NSDragOperation) {
+        isDragging = false
+        window?.invalidateCursorRects(for: self)
+        owner?.onReorderDragEnded?()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Class only supports programmatic initialization")
+    }
+}
+
 private final class GlideSidebarWindowButton: NSButton {
     // A muted steel blue keeps the current window easy to locate without competing with app icons.
     private static let focusedBackgroundColor = NSColor(
@@ -576,10 +1175,15 @@ private final class GlideSidebarWindowButton: NSButton {
         green: 90 / 255,
         blue: 134 / 255,
         alpha: 0.88)
-
-    let windowModel: Window?
     private let displayTitle: String
     private let isFocused: Bool
+    private let isRunning: Bool
+    private let activationHandler: () -> Void
+    private let pinAction: GlideSidebarPinAction?
+    let reorderIdentifier: String?
+    var onReorderDragBegan: (() -> Void)?
+    var onReorderDragEnded: (() -> Void)?
+    private var reorderDragHandle: GlideSidebarPinnedDragHandle?
     private var hoverTrackingArea: NSTrackingArea?
     private var isHovered = false {
         didSet {
@@ -589,11 +1193,12 @@ private final class GlideSidebarWindowButton: NSButton {
     }
 
     init(_ item: GlideSidebarItem) {
-        let window = item.window
-        windowModel = window
         displayTitle = item.title
-        isFocused = Applications.frontmostPid == window.application.pid
-            && (item.highlightsApplication || window.application.focusedWindow === window)
+        isFocused = item.isFocused
+        isRunning = item.isRunning
+        activationHandler = item.activate
+        pinAction = item.pinAction
+        reorderIdentifier = item.reorderIdentifier
         super.init(frame: .zero)
         toolTip = item.title
         font = .systemFont(ofSize: 13, weight: .regular)
@@ -602,16 +1207,72 @@ private final class GlideSidebarWindowButton: NSButton {
         bezelStyle = .inline
         imagePosition = .imageLeading
         imageScaling = .scaleProportionallyDown
-        if let icon = window.application.runningApplication.icon?.copy() as? NSImage {
+        if let icon = item.icon?.copy() as? NSImage {
             icon.size = NSSize(width: 24, height: 24)
             image = icon
+        }
+        if let pinAction {
+            let menu = NSMenu()
+            let menuItem = NSMenuItem(
+                title: pinAction.title,
+                action: #selector(performPinAction(_:)),
+                keyEquivalent: "")
+            menuItem.target = self
+            menu.addItem(menuItem)
+            self.menu = menu
+        }
+        if let reorderIdentifier {
+            let handle = GlideSidebarPinnedDragHandle(
+                bundleIdentifier: reorderIdentifier,
+                owner: self)
+            reorderDragHandle = handle
+            addSubview(handle)
         }
         cell?.lineBreakMode = .byTruncatingTail
         wantsLayer = true
         layer?.cornerRadius = 4
         updateBackground()
         setExpanded(true)
-        setAccessibilityLabel("\(window.application.localizedName ?? "Application"), \(item.title)")
+        setAccessibilityLabel(item.accessibilityLabel)
+    }
+
+    func activate() {
+        activationHandler()
+    }
+
+    @objc private func performPinAction(_ sender: NSMenuItem) {
+        pinAction?.perform()
+    }
+
+    func reorderDraggingImage() -> NSImage {
+        let image = NSImage(size: bounds.size)
+        guard let representation = bitmapImageRepForCachingDisplay(in: bounds) else { return image }
+        cacheDisplay(in: bounds, to: representation)
+        image.addRepresentation(representation)
+        return image
+    }
+
+    override func layout() {
+        super.layout()
+        reorderDragHandle?.frame = CGRect(
+            x: max(0, bounds.width - 22),
+            y: 0,
+            width: min(22, bounds.width),
+            height: bounds.height)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // AppKit supplies hit-test points in the superview's coordinate system. Reject points
+        // outside this row before testing the nested handle, otherwise the first pinned row can
+        // intercept the adjacent header's add button.
+        guard frame.contains(point) else { return nil }
+        if let reorderDragHandle, !reorderDragHandle.isHidden {
+            let pointInButton = convert(point, from: superview)
+            if reorderDragHandle.frame.contains(pointInButton) {
+                return reorderDragHandle
+            }
+        }
+        return super.hitTest(point)
     }
 
     override func updateTrackingAreas() {
@@ -643,9 +1304,11 @@ private final class GlideSidebarWindowButton: NSButton {
             ])
         imagePosition = isExpanded ? .imageLeading : .imageOnly
         alignment = isExpanded ? .left : .center
+        reorderDragHandle?.isHidden = !isExpanded
     }
 
     private func updateBackground() {
+        alphaValue = isRunning || isHovered ? 1 : 0.58
         let color: NSColor?
         switch GlideSidebarLayout.rowVisualState(isFocused: isFocused, isHovered: isHovered) {
         case .normal:

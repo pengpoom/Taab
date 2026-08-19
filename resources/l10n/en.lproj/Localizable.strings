@@ -340,3 +340,11 @@
 "Off" = "Off";
 "Left" = "Left";
 "Right" = "Right";
+"Pinned" = "Pinned";
+"Other Apps" = "Other Apps";
+"Full Screen" = "Full Screen";
+"Desktop %d" = "Desktop %d";
+"Add App…" = "Add App…";
+"Pin App" = "Pin App";
+"Unpin App" = "Unpin App";
+"Drag to reorder" = "Drag to reorder";
