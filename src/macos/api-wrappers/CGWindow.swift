@@ -10,6 +10,16 @@ extension CGWindow {
         return CGWindowListCopyWindowInfo([.excludeDesktopElements, option], kCGNullWindowID) as! [CGWindow]
     }
 
+    /// Whether `targetWid` is the frontmost on-screen normal-level window. This is a one-shot post-focus read;
+    /// the returned dictionaries are not cached, so verification adds no idle-memory footprint.
+    static func isVisuallyFront(_ targetWid: CGWindowID) -> Bool {
+        for window in windows(.optionOnScreenOnly) where window.layer() == 0 {
+            guard let wid = window.id() else { continue }
+            return wid == targetWid
+        }
+        return false
+    }
+
     // periphery:ignore
     // workaround: filtering this criteria seems to remove non-windows UI elements
     func isNotMenubarOrOthers() -> Bool {

@@ -35,11 +35,11 @@ activation snapshots nothing, so its tail is empty and the user's own Cmd+` insi
   window ⇒ always bump. First 808 of a live activation ⇒ bump, mark `focusBumped`, consume the wid.
   In-snapshot 808 after that ⇒ raise, swallow, consume. Otherwise ⇒ bump iff `appIsActive`.
 - **`onActivation(snapshotWids, until, altTabTarget) -> (entry, bumpWid)`** — build the activation entry.
-  A known AltTab-initiated target (switcher selection / CLI focus) is bumped directly with `focusBumped` set
-  (AX backstop yields) — with no 808 and a stale AX read, the freshly-focused window's bump was otherwise
-  lost — and with an EMPTY snapshot, because AltTab raises exactly one window rather than fronting the app's
-  stack, so that activation has no raise tail to swallow (#5785's log: three alt-tabs into a 3-window Chrome,
-  one 808 each, always the target's). No target ⇒ plain entry; the first 808 or the AX backstop decides.
+  A known AltTab-initiated target (switcher selection / CLI focus) is deferred until bounded visual
+  verification, with `focusBumped` set (AX backstop yields) and the target in the one-shot 808 mask. The
+  raise-tail snapshot stays EMPTY because AltTab raises exactly one window rather than fronting the app's
+  stack (#5785's log: three alt-tabs into a 3-window Chrome, one 808 each, always the target's). No target ⇒
+  plain entry; the first 808 or the AX backstop decides.
 - **`altTabIntentToRecord(wid, pid, frontmostPid, at) -> AltTabFocusIntent?`** — is AltTab's own focus worth
   recording, i.e. is an activation actually COMING? Not when the app is already frontmost: nothing would
   consume the record, and a leftover intent hands the next activation of that app a stale target AND "no raise
@@ -69,18 +69,17 @@ Mirrors `ActivationFocusResolverTests.swift` 1:1.
 
 ### onActivation
 
-- **testAltTabInitiatedActivationBumpsKnownTarget** — known target → bumped directly; entry starts
-  `focusBumped` (the AX backstop yields) with an empty snapshot.
-- **testAltTabInitiatedActivationMutesNothing** — that empty snapshot means a later 808 for ANOTHER window of
+- **testGlideInitiatedActivationDefersKnownTargetUntilVisualVerification** — known target → activation alone
+  does not bump; entry starts `focusBumped` (the AX backstop yields) and masks the target's premature 808
+  until the bounded z-order verification lands.
+- **testGlideInitiatedActivationMutesNothing** — that empty raise tail means a later 808 for ANOTHER window of
   the same app bumps: the second alt-tab of #5785's stuck switcher.
 - **testRestoringAMinimizedTargetMutesTheDeminiaturizeTail** — a MINIMIZED target is the exception: AltTab
   deminiaturizes before focusing, restoring a window stirs the app's others, so this activation does have a
   tail and the snapshot is kept. Live I-11: the sibling's 808 landed 38ms in and took the front off the
   window just restored (#5439).
-- **testRestoringAMinimizedTargetStillBumpsTheTargetsOwnFocus** — the target is subtracted from that tail, so
-  its own 808 is never read as a raise. A GUARD, not a pin: it passes with the fix removed too (an empty
-  tail contains nothing either), and exists to catch a future change that widens the tail to include the
-  target. The two tests around it are teeth-verified — both fail when the subtraction is reverted.
+- **testRestoringAMinimizedTargetWaitsForVisualVerification** — the target's own 808 is masked too, so only
+  successful z-order verification can commit it to MRU slot 0.
 - **testRestoringAMinimizedTargetMutesEachSiblingOnlyOnce** — the entry consumes per wid, so a genuine later
   switch to that sibling still bumps; the muting is one event deep, not a 0.5s blackout.
 

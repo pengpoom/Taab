@@ -688,6 +688,10 @@ enum ReducerInput: Equatable {
     /// (`WindowServerEvents.bumpFocusOnActivation`), else a window discovered while its app was already
     /// frontmost (`Window.checkIfFocused`). The two differ only in their gate.
     case axFocusedWindowRead(wid: CGWindowID, viaActivationBackstop: Bool)
+    /// Taab's bounded post-focus visual check confirmed that its selected window is actually ahead of every
+    /// other app's normal-level window. This is the strong no-808 signal for our own activation; unlike the
+    /// activation notification alone, it proves the window raise completed rather than only the app switch.
+    case glideFocusVerified(wid: CGWindowID, now: TimeInterval)
     /// The AX probes after an order-out agreed the window is gone: dead cached element AND the app no longer
     /// lists the wid (`Applications.removeIfClosedAfterOrderOut`).
     case livenessConfirmedDead(wid: CGWindowID)

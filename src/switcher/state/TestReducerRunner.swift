@@ -202,7 +202,7 @@ final class TestReducerRunner {
     private func inputTime(_ input: ReducerInput) -> TimeInterval? {
         switch input {
         case .windowCreated(_, let now, _), .windowOrderedIn(_, let now, _),
-             .windowFocused(_, let now), .appActivated(_, let now, _),
+             .windowFocused(_, let now), .appActivated(_, let now, _), .glideFocusVerified(_, let now),
              .spaceMembershipChanged(_, _, _, let now, _):
             return now
         default:

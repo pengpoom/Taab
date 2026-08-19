@@ -55,7 +55,7 @@ class TrackedWindowStateBridge {
              .appActivated:
             return true
         case .discoveryLanded, .titleAndTabsRead, .windowServerStateRead, .spacesSynced,
-             .axFocusedWindowRead, .livenessConfirmedDead, .cgsWindowListsRead, .zOrderRead,
+             .axFocusedWindowRead, .glideFocusVerified, .livenessConfirmedDead, .cgsWindowListsRead, .zOrderRead,
              .holdReleaseCheck, .dragOutCheck:
             return false
         }

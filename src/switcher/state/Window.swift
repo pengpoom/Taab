@@ -3,6 +3,11 @@ import Cocoa
 @dynamicMemberLookup
 class Window {
     private static var globalCreationCounter = Int.zero
+    /// One scalar invalidates delayed verification from an older user choice. It is intentionally not a map
+    /// or cache: at most the newest focus request may retry, and idle memory stays constant.
+    private static var focusAttemptGeneration: Int32 = 0
+    private static let sameSpaceFocusVerificationDelay = DispatchTimeInterval.milliseconds(160)
+    private static let crossSpaceFocusVerificationDelay = DispatchTimeInterval.milliseconds(350)
 
     /// Backing record for the fields this window OWNS. Two of its fields are NOT owned here and must never
     /// be read off it directly: `isTabbed` is dead storage (the live value is derived from the `TabGroups`
@@ -365,6 +370,7 @@ class Window {
     }
 
     func focus() {
+        let focusGeneration = Self.nextFocusGeneration()
         if let altTabWindow = altTabWindow() {
             App.shared.activate(ignoringOtherApps: true)
             altTabWindow.makeKeyAndOrderFront(nil)
@@ -389,12 +395,12 @@ class Window {
             // as cross-Space ran SLSSpaceSetFrontPSN on the CURRENT Space, re-fronting the previous app and
             // undoing the raise while the window stayed key (#5586, the Slack-after-sleep variant).
             // Glide knows exactly which window it is focusing — record it so the coming app activation
-            // bumps this window directly instead of divining the focus from a racy 808 / AX read (#5596).
+            // masks the racy 808 / AX signals and waits for the bounded visual postcondition (#5596).
             WindowServerEvents.noteGlideInitiatedFocus(cgWindowId!, application.pid)
             let targetMaybeCrossSpace = !self.spaceIds.isEmpty && !self.spaceIds.contains(originSpaceId)
             let originFrontPid = targetMaybeCrossSpace ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
             BackgroundWork.accessibilityCommandsQueue.addOperation { [weak self] in
-                guard let self else { return }
+                guard let self, Self.isCurrentFocusGeneration(focusGeneration) else { return }
                 if self.isMinimized {
                     try? self.axUiElement!.setAttribute(kAXMinimizedAttribute, false)
                 }
@@ -408,36 +414,106 @@ class Window {
                 //      the origin Space for a cross-Space focus.
                 //   2. makeKeyWindow: make it key, via a synthetic mouse-down/up aimed just outside the window,
                 //      so it becomes key without clicking its content (a top-left click would hit fullscreen UI, #5381).
-                //   3. raiseWindow (kAXRaiseAction): raise it within the app's own window stack. If our cached
-                //      element went stale (the app silently rebuilt the window's a11y node, #5586), this returns
-                //      .invalidUIElement and no-ops, so re-resolve the live element by wid, retry, and heal the
-                //      cache; _SLPS/makeKeyWindow above use the wid/psn directly so they're unaffected.
+                //   3. raiseWindow (kAXRaiseAction): raise it within the app's own window stack.
                 //   4. cross-Space only: restore the origin Space's front process (see snapshot above).
-                var psn = ProcessSerialNumber()
-                GetProcessForPID(self.application.pid, &psn)
-                _SLPSSetFrontProcessWithOptions(&psn, self.cgWindowId!, SLPSMode.userGenerated.rawValue)
-                makeKeyWindow(&psn, self.cgWindowId!)
-                if self.axUiElement!.raiseWindow() == .invalidUIElement, let fresh = self.refreshedAxElement() {
-                    fresh.raiseWindow()
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self, self.axUiElement != fresh else { return }
-                        self.rebindAxElement(fresh)
-                    }
-                }
-                // step 4 (#4507): undo step 1's clobber of the origin Space. The front-switch made that Space
-                // remember our app as its front; restore the app that was there before (snapshotted above) so
-                // returning shows it, not our window. Cross-Space only (originFrontPid is nil otherwise), and
-                // skipped when the origin's front was already this app.
-                if let originFrontPid, originFrontPid != self.application.pid {
-                    var originPsn = ProcessSerialNumber()
-                    GetProcessForPID(originFrontPid, &originPsn)
-                    SLSSpaceSetFrontPSN(CGS_CONNECTION, originSpaceId, originPsn)
-                }
+                self.performExternalFocusAttempt(attempt: 0, generation: focusGeneration,
+                    originSpaceId: originSpaceId, originFrontPid: originFrontPid,
+                    targetMaybeCrossSpace: targetMaybeCrossSpace)
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) {
                     WindowThumbnails.previewSelectedIfNeeded()
                 }
             }
         }
+    }
+
+    /// The focus action plus one bounded recovery attempt. No result is retained after verification: each
+    /// attempt owns only a few ids/status codes, and the fresh AX element replaces (rather than supplements)
+    /// the cached one when an app rebuilt its accessibility tree.
+    private func performExternalFocusAttempt(attempt: Int, generation: Int32, originSpaceId: CGSSpaceID,
+                                             originFrontPid: pid_t?, targetMaybeCrossSpace: Bool) {
+        guard Self.isCurrentFocusGeneration(generation), let wid = cgWindowId, let cachedElement = axUiElement else { return }
+        let element = attempt == 0 ? cachedElement : (refreshedAxElement() ?? cachedElement)
+        if element != cachedElement {
+            DispatchQueue.main.async { [weak self] in self?.rebindAxElement(element) }
+        }
+
+        var psn = ProcessSerialNumber()
+        let processStatus = GetProcessForPID(application.pid, &psn)
+        var frontStatus = CGError.failure
+        var keyStatus = CGError.failure
+        var raiseStatus = AXError.failure
+        if processStatus == noErr {
+            frontStatus = _SLPSSetFrontProcessWithOptions(&psn, wid, SLPSMode.userGenerated.rawValue)
+            keyStatus = makeKeyWindow(&psn, wid)
+            raiseStatus = element.raiseWindow()
+            // Preserve the fast stale-element recovery from #5586 inside the first attempt. The delayed retry
+            // below covers the broader half-success where every call returns before z-order has actually moved.
+            if raiseStatus == .invalidUIElement, let fresh = refreshedAxElement() {
+                raiseStatus = fresh.raiseWindow()
+                DispatchQueue.main.async { [weak self] in self?.rebindAxElement(fresh) }
+            }
+        }
+        if processStatus != noErr || frontStatus != .success || keyStatus != .success || raiseStatus != .success {
+            Logger.warning { "focus attempt=\(attempt + 1) wid=\(wid) pid=\(self.application.pid) "
+                + "psn=\(processStatus) front=\(frontStatus.rawValue) key=\(keyStatus.rawValue) ax=\(raiseStatus.rawValue)" }
+        }
+
+        // Step 4 (#4507): undo step 1's clobber of the origin Space. The retry repeats step 1, so it repeats
+        // the same repair; no state is accumulated between attempts.
+        if let originFrontPid, originFrontPid != application.pid {
+            var originPsn = ProcessSerialNumber()
+            if GetProcessForPID(originFrontPid, &originPsn) == noErr {
+                SLSSpaceSetFrontPSN(CGS_CONNECTION, originSpaceId, originPsn)
+            }
+        }
+
+        scheduleFocusVerification(attempt: attempt, generation: generation, originSpaceId: originSpaceId,
+            originFrontPid: originFrontPid, targetMaybeCrossSpace: targetMaybeCrossSpace)
+    }
+
+    private func scheduleFocusVerification(attempt: Int, generation: Int32, originSpaceId: CGSSpaceID,
+                                           originFrontPid: pid_t?, targetMaybeCrossSpace: Bool) {
+        let delay = targetMaybeCrossSpace ? Self.crossSpaceFocusVerificationDelay : Self.sameSpaceFocusVerificationDelay
+        BackgroundWork.accessibilityCommandsQueue.addOperationAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, Self.isCurrentFocusGeneration(generation), let wid = self.cgWindowId else { return }
+            let focusedWid: CGWindowID? = {
+                guard let appAx = self.application.axUiElement,
+                      let focused = try? appAx.attributes([kAXFocusedWindowAttribute], pid: self.application.pid).focusedWindow else { return nil }
+                return try? focused.cgWindowId(pid: self.application.pid)
+            }()
+            let visuallyFront = CGWindow.isVisuallyFront(wid)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, Self.isCurrentFocusGeneration(generation), Windows.byWindowId[wid] === self else { return }
+                let appIsFrontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == self.application.pid
+                let decision = WindowFocusRetryPolicy.decide(appIsFrontmost: appIsFrontmost, focusedWid: focusedWid,
+                    targetWid: wid, targetIsVisuallyFront: visuallyFront, attempt: attempt)
+                switch decision {
+                case .verified:
+                    TrackedWindowStateBridge.dispatch(.glideFocusVerified(
+                        wid: wid, now: ProcessInfo.processInfo.systemUptime))
+                    Logger.debug { "focus verified attempt=\(attempt + 1) wid=\(wid)" }
+                case .retry:
+                    Logger.warning { "focus half-succeeded; retrying once wid=\(wid) pid=\(self.application.pid) focused=\(focusedWid.map { String($0) } ?? "nil")" }
+                    BackgroundWork.accessibilityCommandsQueue.addOperation { [weak self] in
+                        self?.performExternalFocusAttempt(attempt: attempt + 1, generation: generation,
+                            originSpaceId: originSpaceId, originFrontPid: originFrontPid,
+                            targetMaybeCrossSpace: targetMaybeCrossSpace)
+                    }
+                case .failed:
+                    Logger.error { "focus failed after bounded retry wid=\(wid) pid=\(self.application.pid) focused=\(focusedWid.map { String($0) } ?? "nil")" }
+                case .cancelled:
+                    Logger.debug { "focus verification cancelled wid=\(wid) frontmost=\(appIsFrontmost) focused=\(focusedWid.map { String($0) } ?? "nil")" }
+                }
+            }
+        }
+    }
+
+    private static func nextFocusGeneration() -> Int32 {
+        OSAtomicIncrement32(&focusAttemptGeneration)
+    }
+
+    private static func isCurrentFocusGeneration(_ generation: Int32) -> Bool {
+        OSAtomicAdd32(0, &focusAttemptGeneration) == generation
     }
 
     // for some windows (e.g. Slack), the AX API doesn't return a title; we try CG API; finally we resort to the app name

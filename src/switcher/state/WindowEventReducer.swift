@@ -124,6 +124,8 @@ enum WindowEventReducer {
                 changedSoFar: changedSoFar)
         case .axFocusedWindowRead(let wid, let viaActivationBackstop):
             return axFocusedWindowRead(&state, wid: wid, viaActivationBackstop: viaActivationBackstop)
+        case .glideFocusVerified(let wid, let now):
+            return glideFocusVerified(&state, wid: wid, now: now)
         case .windowServerStateRead(let snapshots):
             return windowServerStateRead(&state, snapshots)
         case .spacesSynced(let windowToSpaces, let topologyChanged):
@@ -334,6 +336,14 @@ enum WindowEventReducer {
             guard state.apps[window.pid]?.isActive == true else { return [] }
         }
         return applyFocusAndBump(&state, wid: wid)
+    }
+
+    /// A visual postcondition from our own focus action. The shell already verified z-order; re-check the
+    /// frontmost pid here so a late result cannot promote a window after the user has switched away.
+    private static func glideFocusVerified(_ state: inout TrackedWindowState, wid: CGWindowID,
+                                           now: TimeInterval) -> [ReducerEffect] {
+        guard let window = state.window(wid), state.frontmostPid == window.pid else { return [] }
+        return applyFocusAndBump(&state, wid: wid, at: now)
     }
 
     /// Closing the window that holds MRU slot 0 hands the front to whoever held slot 1 — which can belong to
@@ -756,7 +766,9 @@ enum WindowEventReducer {
         // separate a raise tail from a real switch, at any threshold — the two ranges intersect. What CAN
         // separate them is knowing we did not cause a tail at all, which is why an Glide-initiated
         // activation snapshots nothing (`onActivation`).
-        // Glide-initiated focus: the target is known — bump it directly, skip the AX backstop.
+        // Glide-initiated focus: the target is known, but activation alone does not prove its window was
+        // raised. Mute its potentially-premature 808 and skip the AX backstop; the bounded visual check sends
+        // `glideFocusVerified` only after the target is actually at the front.
         // ...unless we are RESTORING it, the one Glide focus that does cause a tail (`onActivation`). The
         // fact is read from our own model rather than threaded down from `Window.focus()`: the activation
         // lands ~6ms after the CLI/selection focus while the deminiaturize runs asynchronously on the AX
@@ -768,6 +780,7 @@ enum WindowEventReducer {
         if let bumpWid = activation.bumpWid, state.window(bumpWid) != nil {
             return applyFocusAndBump(&state, wid: bumpWid, at: now)
         }
+        if altTabTargetWid != nil { return [] }
         return [.bumpFocusViaAxBackstop(pid: pid)]
     }
 

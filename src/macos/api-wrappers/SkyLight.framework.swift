@@ -245,7 +245,8 @@ private enum MakeKeyWindowEvent {
 /// `window_manager_make_key_window`), minus the mouse-up it pairs the down with (see `eventTypeOffset`),
 /// and aimed far off the window (see `offContentPoint`) — so the window becomes key without any of its
 /// content being clicked.
-func makeKeyWindow(_ psn: inout ProcessSerialNumber, _ wid: CGWindowID) {
+@discardableResult
+func makeKeyWindow(_ psn: inout ProcessSerialNumber, _ wid: CGWindowID) -> CGError {
     var wid = wid
     var point = MakeKeyWindowEvent.offContentPoint
     var bytes = [UInt8](repeating: 0, count: MakeKeyWindowEvent.bufferSize)
@@ -255,7 +256,7 @@ func makeKeyWindow(_ psn: inout ProcessSerialNumber, _ wid: CGWindowID) {
     memcpy(&bytes[MakeKeyWindowEvent.windowIdOffset], &wid, MemoryLayout<CGWindowID>.size)
     memcpy(&bytes[MakeKeyWindowEvent.windowLocationOffset], &point, MemoryLayout<CGPoint>.size)
     bytes[MakeKeyWindowEvent.eventTypeOffset] = MakeKeyWindowEvent.leftMouseDown
-    SLPSPostEventRecordTo(&psn, &bytes)
+    return SLPSPostEventRecordTo(&psn, &bytes)
 }
 
 // MARK: - WindowServer notification tap (see WindowServerEvents.swift)

@@ -464,6 +464,8 @@ final class TestReducerRunnerTests: XCTestCase {
             // alt-tab 1: Glide focuses Chrome's window A, so its activation carries the known target
             .setFrontmost(pid: 500),
             .input(.appActivated(pid: 500, now: 10.0, altTabTargetWid: 100)),
+            // The same-Space visual postcondition lands before the captured second alt-tab at +219ms.
+            .input(.glideFocusVerified(wid: 100, now: 10.160)),
             // alt-tab 2, a beat later: Glide focuses window B and macOS reports the focus
             .input(.windowFocused(wid: 101, now: 10.219)),
         ])

@@ -80,3 +80,11 @@ rather than dropped. These two pin the reducer end: the kernel only learns the t
 - **testFocusingANonMinimizedWindowStillLetsTheSiblingsFocusBump** — the counterfactual that keeps #5785
   safe: the same tail against a non-minimized target still bumps, because there no tail was caused. The two
   behaviours differ only by whether AltTab had to deminiaturize.
+
+### D. Glide focus visual verification
+
+- **testGlideActivationOnlyBumpsAfterVisualVerification** — our own app activation neither commits the
+  target early nor schedules the stale-prone AX backstop; the confirmed visual postcondition owns the MRU
+  promotion.
+- **testLateVisualVerificationCannotBumpAfterSwitchingAway** — a delayed result is ignored once another app
+  is frontmost.

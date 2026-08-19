@@ -144,13 +144,15 @@ final class WindowEventReducerFocusTests: XCTestCase {
             .setAppActive(pid: Self.finderPid, isActive: false),
             .setAppActive(pid: Self.textEditPid, isActive: true),
             .setFrontmost(pid: Self.textEditPid),
-            // 02:04:04.833 — our own focus, so the target is known and bumped directly.
+            // 02:04:04.833 — our own focus, so the target is known but not committed before verification.
             .input(.appActivated(pid: Self.textEditPid, now: 4.833, altTabTargetWid: Self.teRestoredWid)),
             // 02:04:04.871 — the deminiaturize tail: the sibling, which the user never asked for.
             .input(.windowFocused(wid: Self.teSiblingWid, now: 4.871)),
             .input(.windowOrderedIn(wid: Self.teSiblingWid, now: 4.871, inSpaceTransition: false)),
             // 02:04:04.874 — the window actually being restored arrives 3ms later.
             .input(.windowOrderedIn(wid: Self.teRestoredWid, now: 4.874, inSpaceTransition: false)),
+            // The bounded z-order check confirms that the restore actually reached the front.
+            .input(.glideFocusVerified(wid: Self.teRestoredWid, now: 4.993)),
         ])
         // The restored window takes slot 0 and everything else keeps its relative order: Finder shifts down
         // to 1, and the sibling — whose focus was swallowed as the tail — does not move at all.
@@ -177,6 +179,31 @@ final class WindowEventReducerFocusTests: XCTestCase {
     }
 
     // MARK: - B. The rule
+
+    func testGlideActivationOnlyBumpsAfterVisualVerification() {
+        var s = state([
+            window(Self.finderWid, Self.finderPid, "Liebesleid", order: 0),
+            window(Self.reaperMainWid, Self.reaperPid, "Country Dance - REAPER v7.78", order: 1),
+        ], frontmost: Self.reaperPid)
+        s.apps[Self.finderPid]?.isActive = false
+        s.apps[Self.reaperPid]?.isActive = true
+        let activationEffects = WindowEventReducer.reduce(&s, .appActivated(
+            pid: Self.reaperPid, now: 10, altTabTargetWid: Self.reaperMainWid))
+        XCTAssertTrue(activationEffects.isEmpty, "known target does not need a redundant AX backstop read")
+        XCTAssertEqual(order(s, Self.finderWid), 0, "app activation alone does not prove the window raised")
+        _ = WindowEventReducer.reduce(&s, .glideFocusVerified(wid: Self.reaperMainWid, now: 10.16))
+        XCTAssertEqual(order(s, Self.reaperMainWid), 0)
+    }
+
+    func testLateVisualVerificationCannotBumpAfterSwitchingAway() {
+        var s = state([
+            window(Self.finderWid, Self.finderPid, "Liebesleid", order: 0),
+            window(Self.reaperMainWid, Self.reaperPid, "Country Dance - REAPER v7.78", order: 1),
+        ], frontmost: Self.finderPid)
+        let effects = WindowEventReducer.reduce(&s, .glideFocusVerified(wid: Self.reaperMainWid, now: 10.16))
+        XCTAssertTrue(effects.isEmpty)
+        XCTAssertEqual(order(s, Self.finderWid), 0)
+    }
 
     /// Another app holds slot 1, but focus never crosses apps because a window closed: the frontmost app's
     /// own next window takes the front, and `.applyFocus` names it so the live model agrees.

@@ -55,11 +55,16 @@ enum ActivationFocusResolver {
     }
 
     /// Build the activation entry when an app activates. When the activation was ALTTAB-INITIATED (the
-    /// switcher just focused `altTabTarget`, same app, fresh), the target is KNOWN — no need to divine it
-    /// from events: bump it directly and mark the entry `focusBumped`, so the stale-prone AX backstop yields.
+    /// switcher just requested `altTabTarget`, same app, fresh), the target is KNOWN — mark the entry
+    /// `focusBumped` so the stale-prone AX backstop yields, and put the target in the one-shot event mask, but
+    /// do not bump the MRU yet. The request can half-succeed (the app activates while its selected window
+    /// remains behind another app), so the shell
+    /// confirms visual z-order and sends `glideFocusVerified` before the target is committed to MRU slot 0.
     /// Without a known target, a plain entry is returned and the focus comes from the first 808 (or the AX
     /// backstop when none arrives). This closes the last race for the app's own switches: with no 808 and a
-    /// stale AX read, the freshly-focused window's bump was otherwise lost.
+    /// stale AX read, the freshly-focused window's bump was otherwise lost. The bounded visual verification
+    /// is now that no-event backstop. Keeping only the target in `wids` mutes its possibly-premature 808 while
+    /// still allowing a genuine subsequent focus of a sibling window to bump immediately.
     ///
     /// An Glide-initiated activation gets an EMPTY snapshot: there is no raise tail to swallow, because
     /// Glide raises exactly one window (`_SLPSSetFrontProcessWithOptions` with a wid) rather than fronting
@@ -76,7 +81,7 @@ enum ActivationFocusResolver {
     /// snapshot — is false exactly here, and the tail must be muted like any other.
     ///
     /// Measured over five live restores (QA I-11, 2026-07-31). Four emitted no focus 808 at all, the
-    /// activation's own known-target bump being the only thing that set the order:
+    /// activation's own known-target bump (now the visual verification) being the only thing that set the order:
     ///
     ///     --focus=92339 → appActivated | mru bump #92339 → windowOrderedIn #92339
     ///
@@ -87,14 +92,15 @@ enum ActivationFocusResolver {
     ///                   → windowFocused #90106 | mru bump #90106   ← the sibling wins
     ///                   → windowOrderedIn #90112                    ← the target, 3ms later
     ///
-    /// The target itself is never in the tail: it is what the user asked for, it is already bumped here, and
-    /// on this path it is minimized so the caller's snapshot excludes it anyway — subtracted regardless so
+    /// The target itself is never in the tail: it is what the user asked for, and on this path it is minimized
+    /// so the caller's snapshot excludes it anyway — subtracted regardless so
     /// the guarantee does not depend on how the caller built the set.
     static func onActivation(snapshotWids: Set<CGWindowID>, until: TimeInterval, altTabTarget: CGWindowID?,
                              targetWasMinimized: Bool = false) -> (entry: ActivationEntry, bumpWid: CGWindowID?) {
         if let target = altTabTarget {
             let tail = targetWasMinimized ? snapshotWids.subtracting([target]) : []
-            return (ActivationEntry(wids: tail, until: until, focusBumped: true, raiseTail: tail), target)
+            return (ActivationEntry(wids: tail.union([target]), until: until, focusBumped: true,
+                raiseTail: tail), nil)
         }
         return (ActivationEntry(wids: snapshotWids, until: until, raiseTail: snapshotWids), nil)
     }
@@ -141,5 +147,25 @@ enum ActivationFocusResolver {
     /// entry already expired or was never created.)
     static func axBackstopShouldApply(_ entry: ActivationEntry?) -> Bool {
         entry?.focusBumped != true
+    }
+}
+
+/// Pure verdict for Taab's bounded post-focus check. Visual stacking is the strong signal for the reported
+/// half-success: some apps accept keyboard focus while their window stays behind another app. AX focus is used
+/// only to avoid stealing focus back after the user has deliberately moved to another same-app window.
+enum WindowFocusRetryPolicy {
+    enum Decision: Equatable {
+        case verified
+        case retry
+        case cancelled
+        case failed
+    }
+
+    static func decide(appIsFrontmost: Bool, focusedWid: CGWindowID?, targetWid: CGWindowID,
+                       targetIsVisuallyFront: Bool, attempt: Int) -> Decision {
+        guard appIsFrontmost else { return .cancelled }
+        if targetIsVisuallyFront { return .verified }
+        if let focusedWid, focusedWid != targetWid { return .cancelled }
+        return attempt == 0 ? .retry : .failed
     }
 }

@@ -61,12 +61,12 @@ final class ActivationFocusResolverTests: XCTestCase {
 
     // MARK: - onActivation
 
-    func testGlideInitiatedActivationBumpsKnownTarget() {
-        // the switcher just focused this window — bump it directly, mark the focus spoken (AX backstop
-        // yields). Closes the zero-808 + stale-AX race for Glide's own switches.
+    func testGlideInitiatedActivationDefersKnownTargetUntilVisualVerification() {
+        // App activation alone is only half of the requested operation: the selected window may still be
+        // behind another app. Mark the focus spoken and mask its 808 so neither can win before verification.
         let a = ActivationFocusResolver.onActivation(snapshotWids: [1, 2], until: 100, altTabTarget: 2)
-        XCTAssertEqual(a.bumpWid, 2)
-        XCTAssertEqual(a.entry, ActivationEntry(wids: [], until: 100, focusBumped: true))
+        XCTAssertNil(a.bumpWid)
+        XCTAssertEqual(a.entry, ActivationEntry(wids: [2], until: 100, focusBumped: true))
     }
 
     func testGlideInitiatedActivationMutesNothing() {
@@ -83,19 +83,19 @@ final class ActivationFocusResolverTests: XCTestCase {
         // later, which with an empty snapshot took the front off the window just restored (#5439's shape).
         let a = ActivationFocusResolver.onActivation(snapshotWids: [1, 2], until: 100, altTabTarget: 2,
                                                      targetWasMinimized: true)
-        XCTAssertEqual(a.bumpWid, 2)
-        XCTAssertEqual(a.entry, ActivationEntry(wids: [1], until: 100, focusBumped: true, raiseTail: [1]))
+        XCTAssertNil(a.bumpWid)
+        XCTAssertEqual(a.entry, ActivationEntry(wids: [1, 2], until: 100, focusBumped: true, raiseTail: [1]))
         let d = ActivationFocusResolver.onFocusEvent(a.entry, wid: 1, now: 50, wasJustCreated: false, appIsActive: true)
         XCTAssertFalse(d.bump)
     }
 
-    func testRestoringAMinimizedTargetStillBumpsTheTargetsOwnFocus() {
+    func testRestoringAMinimizedTargetWaitsForVisualVerification() {
         // The target is never part of the tail: subtracted from the snapshot regardless of how the caller
         // built it, so its own 808 is not read as a raise.
         let a = ActivationFocusResolver.onActivation(snapshotWids: [1, 2], until: 100, altTabTarget: 2,
                                                      targetWasMinimized: true)
         let d = ActivationFocusResolver.onFocusEvent(a.entry, wid: 2, now: 50, wasJustCreated: false, appIsActive: true)
-        XCTAssertTrue(d.bump)
+        XCTAssertFalse(d.bump)
     }
 
     func testRestoringAMinimizedTargetMutesEachSiblingOnlyOnce() {
@@ -172,5 +172,31 @@ final class ActivationFocusResolverTests: XCTestCase {
         // the AX read races the app's internal focus update and can return the PREVIOUS window (iTerm,
         // #5596) — once the activation's focus 808 has spoken, the backstop must yield.
         XCTAssertFalse(ActivationFocusResolver.axBackstopShouldApply(entry(focusBumped: true)))
+    }
+
+    // MARK: - bounded focus recovery
+
+    func testVisualFrontIsVerifiedEvenWhenAxFocusReadIsStale() {
+        XCTAssertEqual(WindowFocusRetryPolicy.decide(appIsFrontmost: true, focusedWid: 1, targetWid: 2,
+            targetIsVisuallyFront: true, attempt: 0), .verified)
+    }
+
+    func testHalfSuccessRetriesExactlyOnce() {
+        XCTAssertEqual(WindowFocusRetryPolicy.decide(appIsFrontmost: true, focusedWid: 2, targetWid: 2,
+            targetIsVisuallyFront: false, attempt: 0), .retry)
+        XCTAssertEqual(WindowFocusRetryPolicy.decide(appIsFrontmost: true, focusedWid: 2, targetWid: 2,
+            targetIsVisuallyFront: false, attempt: 1), .failed)
+    }
+
+    func testUnknownAxFocusMayRetryOnce() {
+        XCTAssertEqual(WindowFocusRetryPolicy.decide(appIsFrontmost: true, focusedWid: nil, targetWid: 2,
+            targetIsVisuallyFront: false, attempt: 0), .retry)
+    }
+
+    func testVerificationCancelsAfterUserMovesElsewhere() {
+        XCTAssertEqual(WindowFocusRetryPolicy.decide(appIsFrontmost: false, focusedWid: 2, targetWid: 2,
+            targetIsVisuallyFront: false, attempt: 0), .cancelled)
+        XCTAssertEqual(WindowFocusRetryPolicy.decide(appIsFrontmost: true, focusedWid: 3, targetWid: 2,
+            targetIsVisuallyFront: false, attempt: 0), .cancelled)
     }
 }
